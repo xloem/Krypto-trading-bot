@@ -2379,12 +2379,12 @@ namespace ₿ {
         if (!quotes.bid.empty())
           quotes.bid.price = fmax(
             0,
-            floor(quotes.bid.price / K.gateway->minTick) * K.gateway->minTick
+            round(quotes.bid.price / K.gateway->minTick) * K.gateway->minTick
           );
         if (!quotes.ask.empty())
           quotes.ask.price = fmax(
             quotes.bid.price + K.gateway->minTick,
-            ceil(quotes.ask.price / K.gateway->minTick) * K.gateway->minTick
+            round(quotes.ask.price / K.gateway->minTick) * K.gateway->minTick
           );
       };
       void applyRoundSize() {
