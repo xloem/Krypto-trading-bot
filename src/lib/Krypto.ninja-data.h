@@ -1032,7 +1032,7 @@ namespace ₿ {
         );
       };
       const double calcDiffPercent(Amount older, Amount newer) const {
-        return K.gateway->decimal.percent.truncate(((newer - older) / newer) * 1e+2);
+        return K.gateway->decimal.percent.round(((newer - older) / newer) * 1e+2);
       };
       const mMatter about() const override {
         return mMatter::Profit;
@@ -1663,7 +1663,7 @@ namespace ₿ {
       {};
       void calcTargetBasePos() {
         if (warn_empty()) return;
-        targetBasePosition = K.gateway->decimal.amount.truncate(
+        targetBasePosition = K.gateway->decimal.amount.round(
           qp.autoPositionMode == mAutoPositionMode::Manual
             ? (qp.percentageValues
               ? qp.targetBasePositionPercentage * baseValue / 1e+2
@@ -1711,7 +1711,7 @@ namespace ₿ {
           else if (mPDivMode::SQRT == qp.positionDivergenceMode)   positionDivergence = pDivMin + (sqrt(divCenter) * (pDiv - pDivMin));
           else if (mPDivMode::Switch == qp.positionDivergenceMode) positionDivergence = divCenter < 1e-1 ? pDivMin : pDiv;
         }
-        positionDivergence = K.gateway->decimal.amount.truncate(positionDivergence);
+        positionDivergence = K.gateway->decimal.amount.round(positionDivergence);
       };
       void report() const {
         Print::log("PG", "TBP: "
@@ -2389,14 +2389,14 @@ namespace ₿ {
       };
       void applyRoundSize() {
         if (!quotes.bid.empty())
-          quotes.bid.size = K.gateway->decimal.amount.truncate(
+          quotes.bid.size = K.gateway->decimal.amount.round(
             fmax(K.gateway->minSize, fmin(
               quotes.bid.size,
-              (K.gateway->decimal.price.truncate(wallet.quote.total) * (1 - K.gateway->takeFee)) / quotes.bid.price
+              (K.gateway->decimal.price.round(wallet.quote.total) * (1 - K.gateway->takeFee)) / quotes.bid.price
             ))
           );
         if (!quotes.ask.empty())
-          quotes.ask.size = K.gateway->decimal.amount.truncate(
+          quotes.ask.size = K.gateway->decimal.amount.round(
             fmax(K.gateway->minSize, fmin(
               quotes.ask.size,
               wallet.base.total
@@ -2406,8 +2406,8 @@ namespace ₿ {
       void applyDepleted() {
         const double epsilon = pow(10, -1 * K.gateway->decimal.amount.stream.precision());
         if (!quotes.bid.empty()
-          and abs(quotes.bid.size - (K.gateway->decimal.price.truncate(wallet.quote.total) / quotes.bid.price)) > epsilon
-          and quotes.bid.size > K.gateway->decimal.price.truncate(wallet.quote.total) / quotes.bid.price
+          and abs(quotes.bid.size - (K.gateway->decimal.price.round(wallet.quote.total) / quotes.bid.price)) > epsilon
+          and quotes.bid.size > K.gateway->decimal.price.round(wallet.quote.total) / quotes.bid.price
         ) quotes.bid.clear(mQuoteState::DepletedFunds);
         if (!quotes.ask.empty()
           and abs(quotes.ask.size - wallet.base.total) > epsilon
