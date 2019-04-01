@@ -469,6 +469,7 @@ namespace ₿ {
           if (trade.Kdiff) {
             actualDiff += diff;
             expectedDiff += trade.Kdiff;
+	    REQUIRE(trade.Kdiff > 0);
           }
         }
 
