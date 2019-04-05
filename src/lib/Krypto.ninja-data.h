@@ -2465,12 +2465,10 @@ namespace \u20BF {
       void applyDepleted() {
         const double epsilon = pow(10, -1 * K.gateway->decimal.amount.stream.precision());
         if (!quotes.bid.empty()
-          and abs(quotes.bid.size - (K.gateway->decimal.price.truncate(wallet.quote.total) / quotes.bid.price)) > epsilon
-          and quotes.bid.size > K.gateway->decimal.price.truncate(wallet.quote.total) / quotes.bid.price
+          and quotes.bid.size > wallet.quote.amount / quotes.bid.price - epsilon
         ) quotes.bid.clear(mQuoteState::DepletedFunds);
         if (!quotes.ask.empty()
-          and abs(quotes.ask.size - wallet.base.total) > epsilon
-          and quotes.ask.size > wallet.base.total
+          and quotes.ask.size > wallet.base.amount - epsilon
         ) quotes.ask.clear(mQuoteState::DepletedFunds);
       };
       void applyWaitingPing() {
