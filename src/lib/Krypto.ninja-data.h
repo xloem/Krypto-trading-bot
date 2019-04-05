@@ -2012,14 +2012,20 @@ namespace \u20BF {
         else error("QE", "Invalid quoting mode saved, consider to remove the database file");
       };
       static void quoteAtTopOfMarket(const mMarketLevels &levels, const Price &minTick, mQuotes &quotes) {
-        const mLevel &topBid = levels.bids.begin()->size > minTick
-          ? levels.bids.at(0)
-          : levels.bids.at(levels.bids.size() > 1 ? 1 : 0);
-        const mLevel &topAsk = levels.asks.begin()->size > minTick
-          ? levels.asks.at(0)
-          : levels.asks.at(levels.asks.size() > 1 ? 1 : 0);
-        quotes.bid.price = topBid.price;
-        quotes.ask.price = topAsk.price;
+        mLevel topBid = levels.bids.at(0);
+        mLevel topAsk = levels.asks.at(0);
+	quotes.bid.price = topBid.price;
+	quotes.ask.price = topAsk.price;
+        quotes.debug("Top of market");
+        Price lastBid = quotes.bid.price, lastAsk = quotes.ask.price;
+        if (topBid.size <= minTick && levels.bids.size() > 1) {
+          quotes.bid.price = levels.bids.at(1).price;
+        }
+        if (topAsk.size <= minTick && levels.asks.size() > 1) {
+          quotes.ask.price = levels.asks.at(1).price;
+        }
+        if (lastBid != quotes.bid.price || lastAsk != quotes.ask.price)
+          quotes.debug("Top size <= minTick adjustment");
       };
       static void calcTopOfMarket(
         const mMarketLevels &levels,
@@ -2029,11 +2035,17 @@ namespace \u20BF {
         const Amount        &askSize,
               mQuotes       &quotes
       ) {
-        quoteAtTopOfMarket(levels, minTick, quotes);
-        quotes.bid.price = fmin(levels.fairValue - widthPing / 2.0, quotes.bid.price + minTick);
-        quotes.ask.price = fmax(levels.fairValue + widthPing / 2.0, quotes.ask.price - minTick);
         quotes.bid.size = bidSize;
         quotes.ask.size = askSize;
+        quoteAtTopOfMarket(levels, minTick, quotes);
+        Price lastBid = quotes.bid.price, lastAsk = quotes.ask.price;
+        quotes.bid.price += minTick;
+        quotes.ask.price -= minTick;
+        quotes.debug("Top: Tighten price by minTick");
+        quotes.bid.price = fmin(levels.fairValue - widthPing / 2.0, quotes.bid.price + minTick);
+        quotes.ask.price = fmax(levels.fairValue + widthPing / 2.0, quotes.ask.price - minTick);
+        if (quotes.bid.price != lastBid || quotes.ask.price != lastAsk)
+          quotes.debug("Top: Half ping width");
       };
       static void calcMidOfMarket(
         const mMarketLevels &levels,
@@ -2047,6 +2059,7 @@ namespace \u20BF {
         quotes.ask.price = levels.fairValue + widthPing;
         quotes.bid.size = bidSize;
         quotes.ask.size = askSize;
+        quotes.debug("Mid");
       };
       static void calcJoinMarket(
         const mMarketLevels &levels,
@@ -2056,11 +2069,14 @@ namespace \u20BF {
         const Amount        &askSize,
               mQuotes       &quotes
       ) {
-        quoteAtTopOfMarket(levels, minTick, quotes);
-        quotes.bid.price = fmin(levels.fairValue - widthPing / 2.0, quotes.bid.price);
-        quotes.ask.price = fmax(levels.fairValue + widthPing / 2.0, quotes.ask.price);
         quotes.bid.size = bidSize;
         quotes.ask.size = askSize;
+        quoteAtTopOfMarket(levels, minTick, quotes);
+        Price lastBid = quotes.bid.price, lastAsk = quotes.ask.price;
+        quotes.bid.price = fmin(levels.fairValue - widthPing / 2.0, quotes.bid.price);
+        quotes.ask.price = fmax(levels.fairValue + widthPing / 2.0, quotes.ask.price);
+        if (quotes.bid.price != lastBid || quotes.ask.price != lastAsk)
+          quotes.debug("Join: half ping width");
       };
       static void calcInverseJoinMarket(
         const mMarketLevels &levels,
@@ -2070,18 +2086,20 @@ namespace \u20BF {
         const Amount        &askSize,
               mQuotes       &quotes
       ) {
+        quotes.bid.size = bidSize;
+        quotes.ask.size = askSize;
         quoteAtTopOfMarket(levels, minTick, quotes);
         Price mktWidth = abs(quotes.ask.price - quotes.bid.price);
         if (mktWidth > widthPing) {
           quotes.ask.price = quotes.ask.price + widthPing;
           quotes.bid.price = quotes.bid.price - widthPing;
+          quotes.debug("InverseJoin: shrink by widthPing");
         }
         if (mktWidth < (2.0 * widthPing / 3.0)) {
           quotes.ask.price = quotes.ask.price + widthPing / 4.0;
           quotes.bid.price = quotes.bid.price - widthPing / 4.0;
+          quotes.debug("InverseJoin: shrink by widthPing/4 if width < 2/3");
         }
-        quotes.bid.size = bidSize;
-        quotes.ask.size = askSize;
       };
       static void calcInverseTopOfMarket(
         const mMarketLevels &levels,
@@ -2091,20 +2109,23 @@ namespace \u20BF {
         const Amount        &askSize,
               mQuotes       &quotes
       ) {
+        quotes.bid.size = bidSize;
+        quotes.ask.size = askSize;
         quoteAtTopOfMarket(levels, minTick, quotes);
         Price mktWidth = abs(quotes.ask.price - quotes.bid.price);
         if (mktWidth > widthPing) {
           quotes.ask.price = quotes.ask.price + widthPing;
           quotes.bid.price = quotes.bid.price - widthPing;
+          quotes.debug("InverseTop: shrink by widthPing");
         }
         quotes.bid.price = quotes.bid.price + minTick;
         quotes.ask.price = quotes.ask.price - minTick;
+        quotes.debug("InverseTop: Tighten price by minTick");
         if (mktWidth < (2.0 * widthPing / 3.0)) {
           quotes.ask.price = quotes.ask.price + widthPing / 4.0;
           quotes.bid.price = quotes.bid.price - widthPing / 4.0;
+          quotes.debug("InverseTop: shrink by widthPing/4 if width < 2/3");
         }
-        quotes.bid.size = bidSize;
-        quotes.ask.size = askSize;
       };
       static void calcColossusOfMarket(
         const mMarketLevels &levels,
@@ -2114,23 +2135,24 @@ namespace \u20BF {
         const Amount        &askSize,
               mQuotes       &quotes
       ) {
+        quotes.bid.size = bidSize;
+        quotes.ask.size = askSize;
         quoteAtTopOfMarket(levels, minTick, quotes);
-        quotes.bid.size = 0;
-        quotes.ask.size = 0;
+        Amount maxBid = 0, maxAsk = 0;
         for (const mLevel &it : levels.bids)
-          if (quotes.bid.size < it.size and it.price <= quotes.bid.price) {
-            quotes.bid.size = it.size;
+          if (maxBid < it.size and it.price <= quotes.bid.price) {
+            maxBid = it.size;
             quotes.bid.price = it.price;
           }
         for (const mLevel &it : levels.asks)
-          if (quotes.ask.size < it.size and it.price >= quotes.ask.price) {
-            quotes.ask.size = it.size;
+          if (maxAsk < it.size and it.price >= quotes.ask.price) {
+            maxAsk = it.size;
             quotes.ask.price = it.price;
           }
-        if (quotes.bid.size) quotes.bid.price += minTick;
-        if (quotes.ask.size) quotes.ask.price -= minTick;
-        quotes.bid.size = bidSize;
-        quotes.ask.size = askSize;
+        if (maxBid) quotes.bid.price += minTick;
+        if (maxAsk) quotes.ask.price -= minTick;
+        if (maxBid || maxAsk)
+          quotes.debug("Colossus snipe");
       };
       static void calcDepthOfMarket(
         const mMarketLevels &levels,
@@ -2158,6 +2180,7 @@ namespace \u20BF {
         quotes.ask.price = askPx;
         quotes.bid.size = bidSize;
         quotes.ask.size = askSize;
+        quotes.debug("Depth");
       };
   };
 
@@ -2249,20 +2272,81 @@ namespace \u20BF {
         return !order.disablePostOnly;
       };
       void applyQuotingParameters() {
-        quotes.debug("?"); applySuperTrades();
-        quotes.debug("A"); applyEwmaProtection();
-        quotes.debug("B"); applyTotalBasePosition();
-        quotes.debug("C"); applyStdevProtection();
-        quotes.debug("D"); applyAggressivePositionRebalancing();
-        quotes.debug("E"); applyAK47Increment();
-        quotes.debug("F"); applyBestWidth();
-        quotes.debug("G"); applyTradesPerMinute();
-        quotes.debug("H"); applyRoundPrice();
-        quotes.debug("I"); applyRoundSize();
-        quotes.debug("J"); applyDepleted();
-        quotes.debug("K"); applyWaitingPing();
-        quotes.debug("L"); applyEwmaTrendProtection();
-        quotes.debug("!");
+        Price lastBid = quotes.bid.price, lastAsk = quotes.ask.price;
+        applySuperTrades();
+        if (lastBid != quotes.bid.price || lastAsk != quotes.ask.price) {
+          quotes.debug("Super trades");
+          lastBid = quotes.bid.price;
+          lastAsk = quotes.ask.price;
+        }
+        applyEwmaProtection();
+        if (lastBid != quotes.bid.price || lastAsk != quotes.ask.price) {
+          quotes.debug("EWMA protection");
+          lastBid = quotes.bid.price;
+          lastAsk = quotes.ask.price;
+        }
+        applyTotalBasePosition();
+        if (lastBid != quotes.bid.price || lastAsk != quotes.ask.price) {
+          quotes.debug("Total base position");
+          lastBid = quotes.bid.price;
+          lastAsk = quotes.ask.price;
+        }
+        applyStdevProtection();
+        if (lastBid != quotes.bid.price || lastAsk != quotes.ask.price) {
+          quotes.debug("STDEV protection");
+          lastBid = quotes.bid.price;
+          lastAsk = quotes.ask.price;
+        }
+        applyAggressivePositionRebalancing();
+        if (lastBid != quotes.bid.price || lastAsk != quotes.ask.price) {
+          quotes.debug("Aggressive position rebalancing");
+          lastBid = quotes.bid.price;
+          lastAsk = quotes.ask.price;
+        }
+        applyAK47Increment();
+        if (lastBid != quotes.bid.price || lastAsk != quotes.ask.price) {
+          quotes.debug("AK47 increment");
+          lastBid = quotes.bid.price;
+          lastAsk = quotes.ask.price;
+        }
+        applyBestWidth();
+        if (lastBid != quotes.bid.price || lastAsk != quotes.ask.price) {
+          quotes.debug("Best width");
+          lastBid = quotes.bid.price;
+          lastAsk = quotes.ask.price;
+        }
+        applyTradesPerMinute();
+        if (lastBid != quotes.bid.price || lastAsk != quotes.ask.price) {
+          quotes.debug("Trades per minute");
+          lastBid = quotes.bid.price;
+          lastAsk = quotes.ask.price;
+        }
+        applyRoundPrice();
+        applyRoundSize();
+        if (lastBid != quotes.bid.price || lastAsk != quotes.ask.price) {
+          quotes.debug("Round price and size");
+          lastBid = quotes.bid.price;
+          lastAsk = quotes.ask.price;
+        }
+        applyDepleted();
+        if (lastBid != quotes.bid.price || lastAsk != quotes.ask.price) {
+          quotes.debug("Depleted");
+          lastBid = quotes.bid.price;
+          lastAsk = quotes.ask.price;
+        }
+        applyWaitingPing();
+        if (lastBid != quotes.bid.price || lastAsk != quotes.ask.price) {
+          quotes.debug("Waiting ping");
+          lastBid = quotes.bid.price;
+          lastAsk = quotes.ask.price;
+        }
+        applyEwmaTrendProtection();
+        if (lastBid != quotes.bid.price || lastAsk != quotes.ask.price) {
+          quotes.debug("EWMA trend protection");
+          lastBid = quotes.bid.price;
+          lastAsk = quotes.ask.price;
+        }
+        
         quotes.checkCrossedQuotes();
       };
       void applySuperTrades() {
