@@ -108,6 +108,7 @@ namespace ₿ {
     bool              cancelOrdersAuto                = false;
     double            cleanPongsAuto                  = 0.0;
     double            profitHourInterval              = 0.5;
+    bool              localBalance                    = false;
     bool              audio                           = false;
     unsigned int      delayUI                         = 3;
     int               _diffEwma                       = -1;
@@ -186,6 +187,7 @@ namespace ₿ {
         cancelOrdersAuto                =                          j.value("cancelOrdersAuto", cancelOrdersAuto);
         cleanPongsAuto                  =                          j.value("cleanPongsAuto", cleanPongsAuto);
         profitHourInterval              =                          j.value("profitHourInterval", profitHourInterval);
+        localBalance                    =                          j.value("localBalance", localBalance);
         audio                           =                          j.value("audio", audio);
         delayUI                         = fmax(0,                  j.value("delayUI", delayUI));
         if (mode == mQuotingMode::Depth)
@@ -280,6 +282,7 @@ namespace ₿ {
       {               "cancelOrdersAuto", k.cancelOrdersAuto               },
       {                 "cleanPongsAuto", k.cleanPongsAuto                 },
       {             "profitHourInterval", k.profitHourInterval             },
+      {                   "localBalance", k.localBalance                   },
       {                          "audio", k.audio                          },
       {                        "delayUI", k.delayUI                        }
     };
@@ -990,21 +993,31 @@ namespace ₿ {
   };
 
   struct mProfit {
-    Amount baseValue,
-           quoteValue;
+    Amount baseBalance,
+           quoteBalance;
+     Price fairValue;
      Clock time;
+    public:
+      Amount baseValue() const {
+        return (quoteBalance / fairValue) + baseBalance;
+      }
+      Amount quoteValue() const {
+        return (baseBalance * fairValue) + quoteBalance;
+      }
   };
   static void to_json(json &j, const mProfit &k) {
     j = {
-      { "baseValue", k.baseValue },
-      {"quoteValue", k.quoteValue},
-      {      "time", k.time      }
+      { "baseBalance", k.baseBalance },
+      {"quoteBalance", k.quoteBalance},
+      {   "fairValue", k.fairValue   },
+      {        "time", k.time        }
      };
   };
   static void from_json(const json &j, mProfit &k) {
-    k.baseValue  = j.value("baseValue",  0.0);
-    k.quoteValue = j.value("quoteValue", 0.0);
-    k.time       = j.value("time",  (Clock)0);
+    k.baseBalance  = j.value("baseBalance",  0.0);
+    k.quoteBalance = j.value("quoteBalance", 0.0);
+    k.fairValue    = j.value("fairValue",    0.0);
+    k.time         = j.value("time",    (Clock)0);
   };
   struct mProfits: public Sqlite::VectorBackup<mProfit> {
     private_ref:
@@ -1021,14 +1034,14 @@ namespace ₿ {
       };
       const double calcBaseDiff() const {
         return calcDiffPercent(
-          cbegin()->baseValue,
-          crbegin()->baseValue
+          cbegin()->baseValue(),
+          crbegin()->baseValue()
         );
       };
       const double calcQuoteDiff() const {
         return calcDiffPercent(
-          cbegin()->quoteValue,
-          crbegin()->quoteValue
+          cbegin()->quoteValue(),
+          crbegin()->quoteValue()
         );
       };
       const double calcDiffPercent(Amount older, Amount newer) const {
@@ -1748,16 +1761,18 @@ namespace ₿ {
      mSafety safety;
     mProfits profits;
     private_ref:
-      const KryptoNinja &K;
-      const mOrders     &orders;
-      const Price       &fairValue;
+      const KryptoNinja    &K;
+            mQuotingParams &qp;
+      const mOrders        &orders;
+      const Price          &fairValue;
     public:
-      mWalletPosition(const KryptoNinja &bot, const mQuotingParams &q, const mOrders &o, const mButtons &b, const mMarketLevels &l)
+      mWalletPosition(const KryptoNinja &bot, mQuotingParams &q, const mOrders &o, const mButtons &b, const mMarketLevels &l)
         : Broadcast(bot)
         , target(bot, q, l.stats.ewma.targetPositionAutoPercentage, base.value)
         , safety(bot, q, b, l.fairValue, base.value, base.total, target.targetBasePosition)
         , profits(bot, q)
         , K(bot)
+        , qp(q)
         , orders(o)
         , fairValue(l.fairValue)
       {};
@@ -1766,9 +1781,9 @@ namespace ₿ {
       };
       void read_from_gw(const mWallets &raw) {
         if (raw.base.currency.empty() or raw.quote.currency.empty() or !fairValue) return;
+        calcMaxFunds(raw, K.arg<double>("wal-lim-base"), K.arg<double>("wal-lim-quote"));
         base.currency = raw.base.currency;
         quote.currency = raw.quote.currency;
-        calcMaxFunds(raw, K.arg<double>("wallet-limit"));
         calcFunds();
       };
       void calcFunds() {
@@ -1777,12 +1792,13 @@ namespace ₿ {
       };
       void calcFundsAfterOrder(const mLastOrder &order, bool *const askForFees) {
         if (!order.price) return;
-        calcHeldAmount(order.side);
-        calcFundsSilently();
         if (order.tradeQuantity) {
+          calcLocalBalance(order);
           safety.insertTrade(order);
           *askForFees = true;
         }
+        calcHeldAmount(order.side);
+        calcFundsSilently();
       };
       const mMatter about() const override {
         return mMatter::Position;
@@ -1810,29 +1826,61 @@ namespace ₿ {
         else if (side == Side::Bid and !quote.currency.empty())
           mWallet::reset(quote.total - heldSide, heldSide, &quote);
       };
+      void calcLocalBalance(const mLastOrder &order) {
+          if (!qp.localBalance) return;
+          Amount baseAdjust = order.tradeQuantity,
+                 quoteAdjust = order.tradeQuantity * order.price;
+          if (order.side == Side::Ask) {
+            mWallet::reset(base.amount, base.held - baseAdjust, &base);
+            mWallet::reset(quote.amount + quoteAdjust, quote.held, &quote);
+          } else if (order.side == Side::Bid) {
+            mWallet::reset(base.amount + baseAdjust, base.held, &base);
+            mWallet::reset(quote.amount, quote.held - quoteAdjust, &quote);
+          }
+      }
       void calcValues() {
         base.value  = (quote.total / fairValue) + base.total;
         quote.value = (base.total * fairValue) + quote.total;
       };
       void calcProfits() {
-        if (!profits.ratelimit())
-          profits.push_back({base.value, quote.value, Tstamp});
+        if (!profits.ratelimit() || profits.back().quoteBalance != quote.total)
+          profits.push_back({base.total, quote.total, fairValue, Tstamp});
         base.profit  = profits.calcBaseDiff();
         quote.profit = profits.calcQuoteDiff();
       };
-      void calcMaxFunds(mWallets raw, Amount limit) {
-        if (limit) {
-          limit -= raw.quote.held / fairValue;
-          if (limit > 0 and raw.quote.amount / fairValue > limit) {
-            raw.quote.amount = limit * fairValue;
-            raw.base.amount = limit = 0;
-          } else limit -= raw.quote.amount / fairValue;
-          limit -= raw.base.held;
-          if (limit > 0 and raw.base.amount > limit)
-            raw.base.amount = limit;
+      void calcMaxFunds(mWallets raw, Amount limitBase, Amount limitQuote) {
+        if (base.currency.empty() or quote.currency.empty()) {
+          if (qp.localBalance && !profits.empty()) {
+            if (limitBase || limitQuote) {
+              Print::logWar("DB", "Already tracking local balance: commandline limit ignored.");
+            }
+            auto & lastProfit = profits.back();
+            mWallet::reset(lastProfit.baseBalance, 0, &base);
+            mWallet::reset(lastProfit.quoteBalance, 0, &quote);
+            Print::log("DB", "Loaded local balance: " + K.gateway->decimal.amount.str(base.total) + " " + raw.base.currency + " and " + K.gateway->decimal.amount.str(quote.total) + " " + raw.quote.currency);
+          } else if (limitBase || limitQuote) {
+            mWallet::reset(limitBase, 0, &base);
+            mWallet::reset(limitQuote, 0, &quote);
+
+            qp.localBalance = true;
+            qp.backup();
+            qp.broadcast();
+          }
+        } else if (!qp.localBalance) {
+          mWallet::reset(raw.base.amount, raw.base.held, &base);
+          mWallet::reset(raw.quote.amount, raw.quote.held, &quote);
         }
-        mWallet::reset(raw.base.amount, raw.base.held, &base);
-        mWallet::reset(raw.quote.amount, raw.quote.held, &quote);
+
+        if (qp.localBalance) {
+          if (raw.base.amount < base.amount) {
+            Print::logWar("GW " + K.gateway->exchange, "AVAILABLE " + raw.base.currency + " DEPLETED BELOW " + K.gateway->decimal.amount.str(base.total));
+            //mWallet::reset(raw.base.amount, base.held, &base);
+          }
+          if (raw.quote.amount < quote.amount) {
+            Print::logWar("GW " + K.gateway->exchange, "AVAILABLE " + raw.quote.currency + " DEPLETED BELOW " + K.gateway->decimal.amount.str(quote.total));
+            //mWallet::reset(raw.quote.amount, quote.held, &quote);
+          }
+        }
       };
   };
 
