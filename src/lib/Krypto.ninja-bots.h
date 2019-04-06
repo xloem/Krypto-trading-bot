@@ -439,6 +439,7 @@ namespace ₿ {
         for (const Argument &it : (vector<Argument>){
           {"debug-secret", "1",      nullptr,  "print (never share!) secret inputs and outputs"},
           {"debug",        "1",      nullptr,  "print detailed output about all the (previous) things!"},
+          {"debug-fix",    "1",      nullptr,  "output FIX errors received from server"},
           {"colors",       "1",      nullptr,  "print highlighted output"},
           {"title",        "WORD",   K_SOURCE, "set WORD to allow admins to identify different bots"},
           {"free-version", "1",      nullptr,  "work with all market levels but slowdown 7 seconds"}
@@ -1512,8 +1513,89 @@ namespace ₿ {
             Print::logWar(prefix, reason);
           else Print::log(prefix, reason, highlight);
         };
+
+        if (arg<int>("debug-fix") and !gateway->fix.empty()) {
+          InjectedFIXDebug injection((GwCoinbase *)gateway);
+        }
+      };
+
+      class InjectedFIXDebug : public FIX::NullApplication {
+      public:
+        using ventry_t = void (*)();
+        using vptr_t = ventry_t *;
+
+        InjectedFIXDebug(FIX::NullApplication * originalApplication)
+        {
+          vOriginal = vptrRef(originalApplication);
+          vWrapper = vptrRef(this);
+
+          vptrRef(originalApplication) = vWrapper;
+
+          wrapped = originalApplication;
+        }
+
+        ~InjectedFIXDebug() override {
+          if (this == wrapped) {
+            unwrap();
+            this->InjectedFIXDebug::~InjectedFIXDebug();
+            rewrap();
+          }
+        }
+
+        void onCreate( const FIX::SessionID& session ) override {
+          unwrap();
+          this->onCreate( session );
+          rewrap();
+        }
+
+        void onLogon( const FIX::SessionID& session ) override {
+          unwrap();
+          this->onLogon( session );
+          rewrap();
+        }
+
+        void onLogout( const FIX::SessionID& session ) override {
+          unwrap();
+          this->onLogout( session );
+          rewrap();
+        }
+
+        void toAdmin( FIX::Message& message, const FIX::SessionID& session ) override {
+          // message sent to server
+          unwrap(); this->toAdmin( message, session ); rewrap();
+        }
+
+        void toApp( FIX::Message& message, const FIX::SessionID& session ) override {
+          unwrap(); this->toApp( message, session ); rewrap();
+        }
+
+        void fromAdmin( const FIX::Message& message, const FIX::SessionID& session ) override {
+          unwrap(); this->fromAdmin( message, session ); rewrap();
+        }
+
+        void fromApp( const FIX::Message& message, const FIX::SessionID& session ) override {
+          if (message.isSetField(58)) // descriptive text
+            Print::logWar("FIX", message.getField(58));
+
+          unwrap(); this->fromApp(message, session); rewrap();
+        }
+
+      private:
+        void unwrap() {
+          vptrRef(this) = vOriginal;
+        }
+        void rewrap() {
+          vptrRef(this) = vWrapper;
+        }
+        static constexpr vptr_t & vptrRef(FIX::NullApplication * ptr) {
+          return *reinterpret_cast<vptr_t *>(ptr);
+        }
+        static vptr_t vOriginal, vWrapper;
+        static FIX::NullApplication * wrapped;
       };
   };
+  KryptoNinja::InjectedFIXDebug::vptr_t KryptoNinja::InjectedFIXDebug::vOriginal, KryptoNinja::InjectedFIXDebug::vWrapper;
+  FIX::NullApplication * KryptoNinja::InjectedFIXDebug::wrapped;
 }
 
 #endif
