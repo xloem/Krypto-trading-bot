@@ -2535,24 +2535,26 @@ namespace ₿ {
           quotes.bid.size = K.gateway->decimal.amount.round(
             fmax(K.gateway->minSize, fmin(
               quotes.bid.size,
-              (K.gateway->decimal.price.round(wallet.quote.amount) * (1 - K.gateway->makeFee)) / quotes.bid.price
+              (K.gateway->decimal.price.round(wallet.quote.total) * (1 - K.gateway->takeFee)) / quotes.bid.price
             ))
           );
         if (!quotes.ask.empty())
           quotes.ask.size = K.gateway->decimal.amount.round(
             fmax(K.gateway->minSize, fmin(
               quotes.ask.size,
-              wallet.base.amount * (1 - K.gateway->makeFee)
+              wallet.base.total
             ))
           );
       };
       void applyDepleted() {
         const double epsilon = pow(10, -1 * K.gateway->decimal.amount.stream.precision());
         if (!quotes.bid.empty()
-          and quotes.bid.size > wallet.quote.amount * (1 - K.gateway->makeFee) / quotes.bid.price - epsilon
+          and abs(quotes.bid.size - (K.gateway->decimal.price.truncate(wallet.quote.total) / quotes.bid.price)) > epsilon
+          and quotes.bid.size > K.gateway->decimal.price.truncate(wallet.quote.total) / quotes.bid.price
         ) quotes.bid.clear(mQuoteState::DepletedFunds);
         if (!quotes.ask.empty()
-          and quotes.ask.size > wallet.base.amount * (1 - K.gateay->makeFee) - epsilon
+          and abs(quotes.ask.size - wallet.base.total) > epsilon
+          and quotes.ask.size > wallet.base.total
         ) quotes.ask.clear(mQuoteState::DepletedFunds);
       };
       void applyWaitingPing() {
