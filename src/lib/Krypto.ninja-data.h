@@ -2042,8 +2042,8 @@ namespace ₿ {
         quotes.bid.price += minTick;
         quotes.ask.price -= minTick;
         quotes.debug("Top: Tighten price by minTick");
-        quotes.bid.price = fmin(levels.fairValue - widthPing / 2.0, quotes.bid.price + minTick);
-        quotes.ask.price = fmax(levels.fairValue + widthPing / 2.0, quotes.ask.price - minTick);
+        quotes.bid.price = fmin(levels.fairValue - widthPing / 2.0, quotes.bid.price);
+        quotes.ask.price = fmax(levels.fairValue + widthPing / 2.0, quotes.ask.price);
         if (quotes.bid.price != lastBid || quotes.ask.price != lastAsk)
           quotes.debug("Top: Half ping width");
       };
