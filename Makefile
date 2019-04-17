@@ -45,6 +45,17 @@ KARGS   := -std=c++17 -O3 -pthread -DK_0_GIT='"$(shell          \
 
 all K: $(SOURCE)
 
+wrapper: $(wildcard src/wrapper/*)
+	-egrep ₿ src test -lR | xargs sed -i 's/₿/\\u20BF/g'
+	@$(MAKE) -C src/wrapper
+	-egrep \\u20BF src test -lR | xargs sed -i 's/\\u20BF/₿/g'
+
+w-src: wrapper
+	@$(MAKE) src ABI=wrapper
+
+w: wrapper
+	@$(MAKE) K ABI=wrapper
+
 hlep hepl help:
 	#                                                  #
 	# Available commands inside K top level directory: #
@@ -325,4 +336,4 @@ md5: src
 asandwich:
 	@test `whoami` = 'root' && echo OK || echo make it yourself!
 
-.PHONY: all K $(SOURCE) hlep hepl help doc test src assets assets.o dist download clean cleandb list screen start stop restart startall stopall restartall packages system_install uninstall install docker reinstall diff latest changelog test-c release md5 asandwich
+.PHONY: all K $(SOURCE) hlep hepl help doc test src assets assets.o dist download clean cleandb list screen start stop restart startall stopall restartall packages system_install uninstall install docker reinstall diff latest changelog test-c release md5 asandwich wrapper wrapped

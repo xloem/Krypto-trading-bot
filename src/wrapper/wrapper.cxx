@@ -4,7 +4,7 @@
 #define K_UNITS_H_
 #include <Krypto.ninja.h>
 
-namespace \u20BF {
+namespace ₿ {
 
   class GwExchangeWrapper : public GwExchange {
     public:
@@ -24,11 +24,11 @@ namespace \u20BF {
 
 }
 
-using namespace \u20BF;
+using namespace ₿;
 
 extern "C" { Gw * new_Gw__wrapped(const std::string & exchange); }
 
-Gw* \u20BF::Gw::new_Gw(const string& exchange)
+Gw* ₿::Gw::new_Gw(const string& exchange)
 {
     return new_Gw__wrapped(exchange);
 }
