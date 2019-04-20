@@ -32,9 +32,9 @@ class GwBitshares : public ₿::GwApiWS {
     mutex msgMtx;
     mutex apiMtx;
     uint64_t DATABASE_API_ID;
-    map<uint64_t, function<void(json const &)>> replies;
+    map<uint64_t, function<void(uWS::WebSocket<uWS::CLIENT> *, json const &)>> replies;
 
-    void wsCall(uWS::WebSocket<uWS::CLIENT> *ws, int api, string method, json const & params, function<void(json const &)> handler);
+    void wsCall(uWS::WebSocket<uWS::CLIENT> *ws, int api, string method, json const & params, function<void(uWS::WebSocket<uWS::CLIENT> *,json const &)> handler);
 
     void error(json const & reply);
 
@@ -106,11 +106,15 @@ const json ₿::GwBitshares::handshake()
   });
   if (!result["error"].is_null()) {
     error(result);
-    return result;
+    return {{  "reply", result}};
   }
   json const & res = result["result"];
   json const & baseJson = res[0];
   json const & quoteJson = res[1];
+  if (baseJson.is_null() || quoteJson.is_null()) {
+    std::cerr << "Currency not found." << std::endl;
+    return {{  "reply", result}};
+  }
   {
     lock_guard<mutex> lock(apiMtx);
     
@@ -136,58 +140,59 @@ bool ₿::GwBitshares::ready(uS::Loop *const)
 {
   api->onConnection([&](WebSocket<CLIENT> *ws, HttpRequest req) {
 
-      shared_ptr<list<function<void(json const &)>>> steps = decltype(steps)(new list<function<void(json const &)>>({
-          [&](json const & res)
+      shared_ptr<list<function<void(WebSocket<CLIENT> *, json const &)>>> steps = decltype(steps)(new list<function<void(WebSocket<CLIENT> *, json const &)>>());
+      steps->assign({
+          [this,steps](WebSocket<CLIENT> *ws, json const & res)
           {
-            steps->pop_front();
+            steps->splice(steps->end(), *steps, steps->begin());
             wsCall(ws, BASE_API_ID, "login", json::array({apikey, pass}), steps->front());
           },
-          [&](json const & res)
+          [this,steps](WebSocket<CLIENT> *ws, json const & res)
           {
-            steps->pop_front();
+            steps->splice(steps->end(), *steps, steps->begin());
             if(res != true) throw res;
 
             wsCall(ws, BASE_API_ID, "database", json::array(), steps->front());
           },
-          [&](json const & res)
+          [this,steps](WebSocket<CLIENT> *ws, json const & res)
           {
-            steps->pop_front();
+            steps->splice(steps->end(), *steps, steps->begin());
             DATABASE_API_ID = res.get<uint64_t>();
 
             unique_lock<mutex> lock(apiMtx);
             if (baseId.empty()) {
               wsCall(ws, DATABASE_API_ID, "lookup_asset_symbols", json::array({json::array({base, quote})}), steps->front());
             } else {
-              steps->pop_front(); // skip 1 step
-              steps->front()({});
+              steps->splice(steps->end(), *steps, steps->begin()); // skip 1 step
+              steps->front()(ws, {});
             }
           },
-          [&](json const & res)
+          [this,steps](WebSocket<CLIENT> *ws, json const & res)
           {
-            steps->pop_front();
+            steps->splice(steps->end(), *steps, steps->begin());
 
             unique_lock<mutex> lock(apiMtx);
             json const & baseJson = res[0];
             json const & quoteJson = res[1];
             baseId = baseJson["id"].get<string>();
             quoteId = quoteJson["id"].get<string>();
-            steps->front()({});
+            steps->front()(ws, {});
           },
-          [&](json const & res)
+          [this,steps](WebSocket<CLIENT> *ws, json const & res)
           {
-            steps->pop_front();
+            steps->splice(steps->end(), *steps, steps->begin());
 
             wsCall(ws, DATABASE_API_ID, "subscribe_to_market", { MARKET, base, quote }, steps->front());
           },
-          [&](json const & res)
+          [this,steps](WebSocket<CLIENT> *ws, json const & res)
           {
-            steps->pop_front();
+            steps->splice(steps->end(), *steps, steps->begin());
 
             write_Connectivity(Connectivity::Connected);
           }
-      }));
+      });
 
-      steps->front()({});
+      steps->front()(ws, {});
   });
   api->onMessage([&](WebSocket<CLIENT> *ws, char * message, size_t size, OpCode opcode) {
     if (opcode != OpCode::TEXT) return;
@@ -196,8 +201,12 @@ bool ₿::GwBitshares::ready(uS::Loop *const)
     auto idEntry = msg.find("id");
     if (idEntry != msg.end()) {
       try {
-        lock_guard<mutex> lock(msgMtx);
-        replies[*idEntry](msg.at("result"));
+        decltype(replies)::mapped_type handler;
+        {
+          lock_guard<mutex> lock(msgMtx);
+          handler = replies[*idEntry];
+        }
+        handler(ws, msg.at("result"));
       } catch(...) {
         error(msg);
       }
@@ -241,7 +250,7 @@ void ₿::GwBitshares::error(json const & reply)
   // }
 }
 
-void ₿::GwBitshares::wsCall(WebSocket<CLIENT> *ws, int api, string method, json const & params, function<void(json const &)> handler)
+void ₿::GwBitshares::wsCall(WebSocket<CLIENT> *ws, int api, string method, json const & params, function<void(uWS::WebSocket<uWS::CLIENT> *, json const &)> handler)
 {
   uint64_t id;
   future<json> reply;
@@ -282,27 +291,36 @@ void ₿::GwBitshares::addLevel(string const & id, Amount base, Amount quote, �
   levelsById[id] = level;
 
   auto levelIt = lower_bound(level.table->begin(), level.table->end(), level, [](mLevel const & a, mLevel const & b) { return a.price < b.price; });
-  if (levelIt->price == level.price)
-    levelIt->size += level.size;
-  else
-    level.table->insert(levelIt, level);
+  if (levelIt != level.table->end())
+    if (levelIt->price == level.price) { // separation of conditions ensures no segfault due to evaluation order
+      levelIt->size += level.size;
+      return;
+    }
+  // else
+  level.table->insert(levelIt, level);
 }
 
 
 void ₿::GwBitshares::removeLevel(string const & id)
 {
-  auto const & orderLevel = levelsById[id];
-  auto const & bookLevelIt = lower_bound(orderLevel.table->begin(), orderLevel.table->end(), orderLevel, [](mLevel const & a, mLevel const & b) { return a.price < b.price; });
-  bookLevelIt->size -= orderLevel.size;
-  if (bookLevelIt->size <= 0) {
-    orderLevel.table->erase(bookLevelIt);
+  auto const orderLevelIt = levelsById.find(id);
+  if (orderLevelIt == levelsById.end())
+    return;
+  auto const & orderLevel = orderLevelIt->second;
+  auto const bookLevelIt = lower_bound(orderLevel.table->begin(), orderLevel.table->end(), orderLevel, [](mLevel const & a, mLevel const & b) { return a.price < b.price; });
+  if (bookLevelIt != orderLevel.table->end()) {
+    bookLevelIt->size -= orderLevel.size;
+    if (bookLevelIt->size <= 0)
+      orderLevel.table->erase(bookLevelIt);
   }
+  levelsById.erase(orderLevelIt);
 }
   
 
 void ₿::GwBitshares::handleMarketNotice(json const & objects)
 {
   for (auto const & object : objects) {
+    std::cerr << object << std::endl;
     if (object.is_object()) {
       auto const & sellPrice = object["sell_price"];
       auto const & base = sellPrice["base"];
