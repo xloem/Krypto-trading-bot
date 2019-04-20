@@ -5,3 +5,5 @@
 #define K_DATA_H_
 #define K_UNITS_H_
 #include <Krypto.ninja.h>
+
+₿::Gw* new_GwBitshares(std::string const &);

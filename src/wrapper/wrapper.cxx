@@ -26,5 +26,8 @@ extern "C" { Gw * new_Gw__wrapped(const std::string & exchange); }
 
 Gw* ₿::Gw::new_Gw(const string& exchange)
 {
+  if (exchange == "BITSHARES")
+    return new_GwBitshares(exchange);
+  else
     return new_Gw__wrapped(exchange);
 }
