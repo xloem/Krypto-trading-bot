@@ -13,6 +13,9 @@ V_CATCH = 2.7.0
 V_UWS   = 0.14.8
 V_QF    = 1.15.1
 V_UV    = 1.27.0
+V_B     = 1.69.0
+V_B_SHA = 8f32d4617390d1c2d16f26a27ab60d97807b35440d45891fa340fc2648b04406
+V_BS    = 3.0.1
 
 KBUILD := $(abspath ../../build-$(KHOST))
 
@@ -22,6 +25,7 @@ all dist:
 ifdef TRAVIS_OS_NAME
 	$(MAKE) lcov pvs
 endif
+	$(MAKE) bitshares
 
 clean:
 	@rm -vrf $(KBUILD)
@@ -138,6 +142,28 @@ libuv:
 	&& cd $(KBUILD)/libuv-$(V_UV) && sh autogen.sh && CC=$(CHOST)-clang ./configure --host=$(CHOST)              \
 	--prefix=$(KBUILD)/local && make all install                                                                 )
 
+boost:
+	test -d $(KBUILD)/boost_$(subst .,_,$(V_B)) || ( curl -L                                              \
+	http://sourceforge.net/projects/boost/files/boost/$(V_B)/boost_$(subst .,_,$(V_B)).tar.bz2/download > \
+	$(KBUILD)/boost.$(V_B).tar.bz2 && test "`sha256sum $(KBUILD)/boost.$(V_B).tar.bz2 | cut -d ' ' -f1`"  \
+	= $(V_B_SHA) && tar xj -C $(KBUILD) -f $(KBUILD)/boost.$(V_B).tar.bz2 &&                              \
+	rm $(KBUILD)/boost.$(V_B).tar.bz2 && cd $(KBUILD)/boost_$(subst .,_,$(V_B))/ &&                       \
+	./bootstrap.sh --prefix=$(KBUILD)/local --with-toolset=gcc &&                                         \
+	sed -i "s/using gcc/using gcc : : $(CHOST)-g++/" project-config.jam && ./b2 install                   )
+
+# includes manual application of https://github.com/bitshares/bitshares-core/pull/1727/commits/583b2c549b80176a5eb6538ddbc2dbe52b1de583
+bitshares: boost
+	test -d $(KBUILD)/bitshares-core-$(V_BS) || (                                                                             \
+	git -C $(KBUILD) clone --recursive --branch $(V_BS) https://github.com/bitshares/bitshares-core.git                       \
+	bitshares-core-$(V_BS) && cd $(KBUILD)/bitshares-core-$(V_BS) &&                                                          \
+	echo 'INSTALL( FILES ${HEADERS} DESTINATION "include/graphene/debug_witness" )'                                           \
+	>> libraries/plugins/debug_witness/CMakeLists.txt && mkdir build && cd build &&                                           \
+	cmake .. -DCMAKE_INSTALL_PREFIX:PATH=$(KBUILD)/local -DCMAKE_CXX_COMPILER=$(CHOST)-g++                                    \
+	-DCMAKE_SYSTEM_NAME="`echo $(CHOST) | sed 's/.*-linux-.*/Linux/p' | sed 's/.*-darwin-.*/Darwin/p'                         \
+	| sed '/.*-mingw32-.*/Windows/p;'`" -DBOOST_ROOT=$(KBUILD)/local && make all install && cp                                \
+	$(KBUILD)/bitshares-core-$(V_BS)/build/libraries/fc/vendor/secp256k1-zkp/src/project_secp256k1-build/.libs/libsecp256k1.a \
+	$(KBUILD)/local/lib                                                                                                       )
+
 pvs:
 ifndef V_PVS
 	$(MAKE) $@ V_PVS=$(shell curl -s https://www.viva64.com/en/pvs-studio-download/ | grep x86_64.tgz | sed 's/.*href=\"\(.*\)\" .*/\1/' | cut -d '-' -f3)
@@ -156,5 +182,7 @@ else
 	curl -L https://github.com/linux-test-project/lcov/releases/download/v$(V_LCOV)/lcov-$(V_LCOV).tar.gz \
 	| tar xz -C $(KBUILD) && cd $(KBUILD)/lcov-$(V_LCOV) && sudo make install                             )
 endif
+
+.PHONY: boost bitshares
 
 .PHONY: all dist clean zlib openssl curl sqlite ncurses json catch uws quickfix libuv lcov pvs
