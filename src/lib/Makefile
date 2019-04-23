@@ -153,16 +153,14 @@ boost:
 
 # includes manual application of https://github.com/bitshares/bitshares-core/pull/1727/commits/583b2c549b80176a5eb6538ddbc2dbe52b1de583
 bitshares: boost
-	test -d $(KBUILD)/bitshares-core-$(V_BS) || (                                                                             \
-	git -C $(KBUILD) clone --recursive --branch $(V_BS) https://github.com/bitshares/bitshares-core.git                       \
-	bitshares-core-$(V_BS) && cd $(KBUILD)/bitshares-core-$(V_BS) &&                                                          \
-	echo 'INSTALL( FILES ${HEADERS} DESTINATION "include/graphene/debug_witness" )'                                           \
-	>> libraries/plugins/debug_witness/CMakeLists.txt && mkdir build && cd build &&                                           \
-	cmake .. -DCMAKE_INSTALL_PREFIX:PATH=$(KBUILD)/local -DCMAKE_CXX_COMPILER=$(CHOST)-g++                                    \
-	-DCMAKE_SYSTEM_NAME="`echo $(CHOST) | sed 's/.*-linux-.*/Linux/p' | sed 's/.*-darwin-.*/Darwin/p'                         \
-	| sed '/.*-mingw32-.*/Windows/p;'`" -DBOOST_ROOT=$(KBUILD)/local && make all install && cp                                \
-	$(KBUILD)/bitshares-core-$(V_BS)/build/libraries/fc/vendor/secp256k1-zkp/src/project_secp256k1-build/.libs/libsecp256k1.a \
-	$(KBUILD)/local/lib                                                                                                       )
+	test -d $(KBUILD)/bitshares-core-$(V_BS) || (                                                       \
+	git -C $(KBUILD) clone --recursive --branch $(V_BS) https://github.com/bitshares/bitshares-core.git \
+	bitshares-core-$(V_BS) && cd $(KBUILD)/bitshares-core-$(V_BS) &&                                    \
+	echo 'INSTALL( FILES ${HEADERS} DESTINATION "include/graphene/debug_witness" )'                     \
+	>> libraries/plugins/debug_witness/CMakeLists.txt && mkdir build && cd build &&                     \
+	cmake .. -DCMAKE_INSTALL_PREFIX:PATH=$(KBUILD)/local -DCMAKE_CXX_COMPILER=$(CHOST)-g++              \
+	-DCMAKE_SYSTEM_NAME="`echo $(CHOST) | sed 's/.*-linux-.*/Linux/p' | sed 's/.*-darwin-.*/Darwin/p'   \
+	| sed '/.*-mingw32-.*/Windows/p;'`" -DBOOST_ROOT=$(KBUILD)/local && make all install                )
 
 pvs:
 ifndef V_PVS
