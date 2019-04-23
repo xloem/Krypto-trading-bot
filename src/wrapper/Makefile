@@ -24,6 +24,7 @@ $(LIB)/K-$(KHOST).wrapper.a: $(LIB)/K-$(KHOST).$(ABI).a $(OBJECTS)
 		mkdir -p $$subtmp && cd $$subtmp && \
 		$(CHOST)-ar x $$lib || exit 1; \
 	done
+	-rm $@
 	$(CHOST)-ar rcs $@ $(OBJECTS) $(TMP)/K-$(KHOST).$(ABI).o $(TMP)/*/*.o
 	-rm -rf $(TMP)
 
