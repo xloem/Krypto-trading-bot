@@ -8,6 +8,7 @@ LIB:=$(KLOCAL)/lib
 TMP:=$(KLOCAL)/tmp
 OBJECTS=$(TMP)/bitshares.o $(TMP)/wrapper.o
 EXTRA_LIBS=$(patsubst %,$(LIB)/lib%.a,graphene_account_history graphene_chain fc boost_system boost_thread boost_filesystem boost_chrono boost_coroutine boost_date_time boost_context) $(LIB)/cryptonomex/libsecp256k1.a
+EXTRA_LIBS=$(patsubst %,$(LIB)/lib%.a,boost_system boost_thread boost_filesystem boost_chrono boost_coroutine boost_date_time boost_context)
 
 wrapper_lib: $(KLOCAL)/lib/K-$(KHOST).wrapper.a
 

@@ -44,7 +44,7 @@ openssl:
 	&& cd $(KBUILD)/openssl-$(V_SSL) && CC=gcc                                                \
 	./Configure $(shell test -n "`echo $(CHOST) | grep mingw32`" && echo mingw64 || echo gcc) \
 	--cross-compile-prefix=$(CHOST)- --prefix=$(KBUILD)/local --openssldir=$(KBUILD)/local    \
-	&& make all install_sw install_ssldirs                                                    )
+	threads -pthread -D_REENTRANT && make all install_sw install_ssldirs                      )
 
 ares:
 	test -d $(KBUILD)/c-ares-$(V_ARES) || (                                                  \
@@ -152,15 +152,16 @@ boost:
 	sed -i "s/using gcc/using gcc : : $(CHOST)-g++/" project-config.jam && ./b2 install                   )
 
 # includes manual application of https://github.com/bitshares/bitshares-core/pull/1727/commits/583b2c549b80176a5eb6538ddbc2dbe52b1de583
-bitshares: boost
+bitshares: boost openssl
 	test -d $(KBUILD)/bitshares-core-$(V_BS) || (                                                       \
-	git -C $(KBUILD) clone --recursive --branch $(V_BS) https://github.com/bitshares/bitshares-core.git \
-	bitshares-core-$(V_BS) && cd $(KBUILD)/bitshares-core-$(V_BS) &&                                    \
+	cd $(KBUILD) && git clone --branch $(V_BS) https://github.com/bitshares/bitshares-core.git          \
+	--recursive bitshares-core-$(V_BS) && cd $(KBUILD)/bitshares-core-$(V_BS) &&                        \
 	echo 'INSTALL( FILES ${HEADERS} DESTINATION "include/graphene/debug_witness" )'                     \
 	>> libraries/plugins/debug_witness/CMakeLists.txt && mkdir build && cd build &&                     \
-	cmake .. -DCMAKE_INSTALL_PREFIX:PATH=$(KBUILD)/local -DCMAKE_CXX_COMPILER=$(CHOST)-g++              \
-	-DCMAKE_SYSTEM_NAME="`echo $(CHOST) | sed 's/.*-linux-.*/Linux/p' | sed 's/.*-darwin-.*/Darwin/p'   \
-	| sed '/.*-mingw32-.*/Windows/p;'`" -DBOOST_ROOT=$(KBUILD)/local && make all install                )
+	cmake .. -DCMAKE_INSTALL_PREFIX:PATH=$(KBUILD)/local -DOPENSSL_ROOT_DIR=$(KBUILD)/local             \
+	-DCMAKE_CXX_COMPILER=$(CHOST)-g++ -DCMAKE_SYSTEM_NAME="`echo $(CHOST) | sed 's/.*-linux-.*/Linux/p' \
+	| sed 's/.*-darwin-.*/Darwin/p' | sed '/.*-mingw32-.*/Windows/p;'`" -DBOOST_ROOT=$(KBUILD)/local && \
+	make all install                                                                                    )
 
 pvs:
 ifndef V_PVS
