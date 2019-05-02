@@ -3,7 +3,7 @@
 //! \file
 //! \brief External exchange API integrations.
 
-namespace ₿ {
+namespace \u20BF {
   enum class Connectivity: unsigned int { Disconnected, Connected };
   enum class       Status: unsigned int { WaitingToWork, Working, Terminated, WaitingToTerminate, Rejected };
   enum class         Side: unsigned int { Bid, Ask };
@@ -365,10 +365,6 @@ namespace ₿ {
             const double points = pow(10, -1 * stream.precision());
             return ::floor(input / points) * points;
           };
-          const double round(const double &input) const {
-            const double points = pow(10, -1 * stream.precision());
-            return std::round(input / points) * points;
-          }
           const string str(const double &input) {
             stream.str("");
             stream << round(input);
