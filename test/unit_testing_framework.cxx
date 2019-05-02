@@ -2,11 +2,12 @@
 //! \brief Configure and run our session of test units.
 
 //! \def
-//! \link  https://github.com/catchorg/Catch2/blob/master/docs/own-main.md
+//! \link https://github.com/catchorg/Catch2/blob/master/docs/own-main.md
 #define CATCH_CONFIG_RUNNER
 #include <catch.h>
 
-//! \brief     Run Catch2 test units only when exit code is EXIT_SUCCESS.
+//! \brief     Enhanced std::exit() when DEBUG mode is enabled.
+//!            Test units are executed only when exit code is EXIT_SUCCESS.
 //! \param[in] code Allows any exit code.
 //! \note      Uncomment all 3 lines about --durations argument to
 //!            visualize and understand the execution order of test units.

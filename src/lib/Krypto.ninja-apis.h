@@ -357,9 +357,13 @@ namespace ₿ {
           {
             stream << fixed;
           };
-          const double truncate(const double &input) const {
+          const double round(const double &input) const {
             const double points = pow(10, -1 * stream.precision());
-            return floor(input / points) * points;
+            return ::round(input / points) * points;
+          };
+          const double floor(const double &input) const {
+            const double points = pow(10, -1 * stream.precision());
+            return ::floor(input / points) * points;
           };
           const double round(const double &input) const {
             const double points = pow(10, -1 * stream.precision());
@@ -519,8 +523,8 @@ namespace ₿ {
           reply = handshake();
         minTick = reply.value("minTick", 0.0);
         minSize = reply.value("minSize", 0.0);
-        makeFee = reply.value("makeFee", 0.0);
-        takeFee = reply.value("takeFee", 0.0);
+        if (!makeFee) makeFee = reply.value("makeFee", 0.0);
+        if (!takeFee) takeFee = reply.value("takeFee", 0.0);
         if (!file.is_open() and minTick and minSize) {
           file.open(cache, fstream::out | fstream::trunc);
           file << reply.dump();

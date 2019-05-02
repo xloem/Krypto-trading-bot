@@ -404,7 +404,7 @@ namespace ₿ {
         };
         if (!arg<int>("autobot")) long_options.push_back(
           {"autobot",      "1",      nullptr,  "automatically start trading on boot"}
-        );;
+        );
         if (!arg<int>("naked")) long_options.push_back(
           {"naked",        "1",      nullptr,  "do not display CLI, print output to stdout instead"}
         );
@@ -431,20 +431,17 @@ namespace ₿ {
                                                "\n" "(the passphrase MUST be removed from the .key file!)"}
         }) long_options.push_back(it);
         for (const Argument &it : (vector<Argument>){
-          {"interface",    "IP",     "",       "set IP to bind as outgoing network interface,"
-                                               "\n" "default IP is the system default network interface"},
+          {"interface",    "IP",     "",       "set IP to bind as outgoing network interface"},
           {"ipv6",         "1",      nullptr,  "use IPv6 when possible"},
-          {"exchange",     "NAME",   "NULL",   "set exchange NAME for trading, mandatory one of:"
-                                               "\n" "'COINBASE', 'BITFINEX', 'ETHFINEX', 'HITBTC',"
-                                               "\n" "'KRAKEN', 'FCOIN', 'KORBIT' , 'POLONIEX' or 'NULL'"},
+          {"exchange",     "NAME",   "NULL",   "set exchange NAME for trading, mandatory"},
           {"currency",     "PAIR",   "NULL",   "set currency PAIR for trading, use format"
                                                "\n" "with '/' separator, like 'BTC/EUR'"},
-          {"make-fee",     "AMOUNT", "0",      "set a custom maker fee to respect, like '0.1%'"},
-          {"take-fee",     "AMOUNT", "0",      "set a custom taker fee to respect, like '0.1%' (unused)"},
           {"apikey",       "WORD",   "NULL",   "set (never share!) WORD as api key for trading, mandatory"},
           {"secret",       "WORD",   "NULL",   "set (never share!) WORD as api secret for trading, mandatory"},
           {"passphrase",   "WORD",   "NULL",   "set (never share!) WORD as api passphrase for trading,"
                                                "\n" "mandatory but may be 'NULL'"},
+          {"maker-fee",    "AMOUNT", "0",      "set percentage of custom maker fee, like '0.1'"},
+          {"taker-fee",    "AMOUNT", "0",      "set percentage of custom taker fee, like '0.1'"},
           {"http",         "URL",    "",       "set URL of alernative HTTPS api endpoint for trading"},
           {"wss",          "URL",    "",       "set URL of alernative WSS api endpoint for trading"},
           {"fix",          "URL",    "",       "set URL of alernative FIX api endpoint for trading"},
@@ -515,16 +512,28 @@ namespace ₿ {
         }
         if (arg<int>("naked"))
           Print::display = nullptr;
-        curl_global_init(CURL_GLOBAL_ALL);
-        Curl::global_setopt = [&](CURL *curl) {
-          curl_easy_setopt(curl, CURLOPT_USERAGENT, "K");
-          if (!arg<string>("interface").empty())
-            curl_easy_setopt(curl, CURLOPT_INTERFACE, arg<string>("interface").data());
-          if (!arg<int>("ipv6"))
-            curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-        };
+        curl_setopt();
       };
     private:
+      void curl_setopt() {
+        curl_global_init(CURL_GLOBAL_ALL);
+        if (!arg<string>("interface").empty() and !arg<int>("ipv6"))
+          Curl::global_setopt = [&](CURL *curl) {
+            curl_easy_setopt(curl, CURLOPT_USERAGENT, "K");
+            curl_easy_setopt(curl, CURLOPT_INTERFACE, arg<string>("interface").data());
+            curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+          };
+        else if (!arg<string>("interface").empty())
+          Curl::global_setopt = [&](CURL *curl) {
+            curl_easy_setopt(curl, CURLOPT_USERAGENT, "K");
+            curl_easy_setopt(curl, CURLOPT_INTERFACE, arg<string>("interface").data());
+          };
+        else if (!arg<int>("ipv6"))
+          Curl::global_setopt = [&](CURL *curl) {
+            curl_easy_setopt(curl, CURLOPT_USERAGENT, "K");
+            curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+          };
+      };
       void tidy() {
         if (arg<string>("currency").find("/") == string::npos or arg<string>("currency").length() < 3)
           error("CF", "Invalid --currency value; must be in the format of BASE/QUOTE, like BTC/EUR");
@@ -539,7 +548,7 @@ namespace ₿ {
           args["debug-secret"] = 1;
         if (arg<int>("latency"))
           args["nocache"] = 1;
-#ifndef _WIN32
+#if !defined(_WIN32) and defined(NDEBUG)
         if (arg<int>("latency") or arg<int>("debug-secret"))
 #endif
           args["naked"] = 1;
@@ -1499,10 +1508,6 @@ namespace ₿ {
           error("GW", "Unable to fetch data from " + gateway->exchange
             + " for symbols " + gateway->base + "/" + gateway->quote
             + ", possible error message: " + reply.dump());
-        if (arg<double>("take-fee"))
-          gateway->takeFee = arg<double>("take-fee") / 100.0;
-        if (arg<double>("make-fee"))
-          gateway->makeFee = arg<double>("make-fee") / 100.0;
         gateway->report(notes, arg<int>("nocache"));
       };
       const unsigned int memSize() const {
@@ -1529,18 +1534,22 @@ namespace ₿ {
                 + "- currency: " + (gateway->base     = arg<string>("base"))     + " .. "
                                  + (gateway->quote    = arg<string>("quote"))    + '\n';
         if (!gateway->http.empty() and !arg<string>("http").empty())
-          gateway->http   = arg<string>("http");
+          gateway->http    = arg<string>("http");
         if (!gateway->ws.empty() and !arg<string>("wss").empty())
-          gateway->ws     = arg<string>("wss");
+          gateway->ws      = arg<string>("wss");
         if (!gateway->fix.empty() and !arg<string>("fix").empty())
-          gateway->fix    = arg<string>("fix");
-        gateway->apikey   = arg<string>("apikey");
-        gateway->secret   = arg<string>("secret");
-        gateway->pass     = arg<string>("passphrase");
-        gateway->maxLevel = arg<int>("market-limit");
-        gateway->debug    = arg<int>("debug-secret");
-        gateway->version  = arg<int>("free-version");
-        gateway->printer  = [&](const string &prefix, const string &reason, const string &highlight) {
+          gateway->fix     = arg<string>("fix");
+        if (arg<double>("taker-fee"))
+          gateway->takeFee = arg<double>("taker-fee") / 1e+2;
+        if (arg<double>("maker-fee"))
+          gateway->makeFee = arg<double>("maker-fee") / 1e+2;
+        gateway->apikey    = arg<string>("apikey");
+        gateway->secret    = arg<string>("secret");
+        gateway->pass      = arg<string>("passphrase");
+        gateway->maxLevel  = arg<int>("market-limit");
+        gateway->debug     = arg<int>("debug-secret");
+        gateway->version   = arg<int>("free-version");
+        gateway->printer   = [&](const string &prefix, const string &reason, const string &highlight) {
           if (reason.find("Error") != string::npos)
             Print::logWar(prefix, reason);
           else Print::log(prefix, reason, highlight);
