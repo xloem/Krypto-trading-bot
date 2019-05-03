@@ -1382,6 +1382,12 @@ namespace ₿ {
       bool matchPong(const string &match, mOrderFilled *const pong) {
         for (auto it = begin(); it != end(); ++it) {
           if (it->tradeId != match) continue;
+          Print::log("GW " + K.gateway->exchange, "MATCH "
+            + string(it->side == Side::Bid ? "BUY " : "SELL ")
+            + "PING at price " + K.gateway->decimal.price.str(it->price) +
+            + " WITH " + (pong->side == Side::Bid ? "BUY " : "SELL ")
+            + "PONG at price " + K.gateway->decimal.price.str(pong->price)
+          );
           Amount Kqty = fmin(pong->quantity, it->quantity - it->Kqty);
           it->Ktime = pong->time;
           it->Kprice = ((Kqty*pong->price) + (it->Kqty*it->Kprice)) / (it->Kqty+Kqty);
