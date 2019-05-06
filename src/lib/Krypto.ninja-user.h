@@ -8,7 +8,7 @@ namespace ₿ {
     Top, Mid, Join, InverseJoin, InverseTop, HamelinRat, Depth
   };
   enum class mOrderPctTotal: unsigned int {
-    Value, Side
+    Value, Side, TBPValue, TBPSide, TBPStretch, TBPStretchSide
   };
   enum class mQuotingSafety: unsigned int {
     Off, PingPong, PingPoing, Boomerang, AK47
@@ -1547,20 +1547,55 @@ namespace ₿ {
       };
     private:
       void calcSizes() {
-        sellSize = qp.percentageValues
-            ? qp.sellSizePercentage * (
-                qp.orderPctTotal == mOrderPctTotal::Value
-                  ? wallets.base.value
-                  : wallets.base.total
-            ) / 1e+2
-            : qp.sellSize;
-        buySize = qp.percentageValues
-          ? qp.buySizePercentage * (
-              qp.orderPctTotal == mOrderPctTotal::Value
-                ? wallets.base.value
-                : wallets.quote.total / fairValue
-          ) / 1e+2
-          : qp.buySize;
+        if (qp.percentageValues) { 
+          sellSize = qp.sellSizePercentage / 1e+2;
+          buySize = qp.buySizePercentage / 1e+2;
+
+          switch (qp.orderPctTotal) {
+          case mOrderPctTotal::Value: default:
+          case mOrderPctTotal::TBPStretch:
+          case mOrderPctTotal::TBPValue:
+            sellSize *= wallets.base.value;
+            buySize *= wallets.base.value;
+            break;
+          case mOrderPctTotal::Side:
+          case mOrderPctTotal::TBPSide:
+            sellSize *= wallets.base.total;
+            buySize *= wallets.base.value - wallets.base.total;
+            break;
+          case mOrderPctTotal::TBPStretchSide:
+            Amount maxValue = targetBasePosition * 2 < wallets.base.value
+                ? targetBasePosition
+                : wallets.base.value - targetBasePosition;
+            sellSize *= maxValue;
+            buySize *= maxValue;
+            break;
+          }
+          // side we desire EXCESS on should have SMALLER sizes
+
+          switch (qp.orderPctTotal) {
+          case mOrderPctTotal::TBPValue:
+          case mOrderPctTotal::TBPSide:
+            if (targetBasePosition < wallets.base.value / 2) {
+              buySize *= targetBasePosition / (wallets.base.value - targetBasePosition);
+            } else {
+              sellSize *= (wallets.base.value - targetBasePosition) / targetBasePosition;
+            }
+            break;
+          case mOrderPctTotal::TBPStretch:
+          case mOrderPctTotal::TBPStretchSide:
+            Amount sideRange = wallets.base.total > targetBasePosition
+              ? wallets.base.value - targetBasePosition
+              : targetBasePosition;
+            Amount portion = (wallets.base.total - targetBasePosition) / sideRange;
+            sellSize *= (1 + portion) / 2;
+            buySize *= (1 - portion) / 2;
+            break;
+          }
+        } else {
+          sellSize = qp.sellSize;
+          buySize = qp.buySize;
+        }
         if (qp.aggressivePositionRebalancing == mAPR::Off) return;
         if (qp.buySizeMax)
           buySize = fmax(buySize, targetBasePosition - wallets.base.total);
