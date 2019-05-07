@@ -336,6 +336,126 @@ namespace ₿ {
       }
     }
 
+    GIVEN("mSafety") {
+      REQUIRE_NOTHROW(wallet.safety.read = [&]() {
+        INFO("read()");
+      });
+
+      WHEN("calcSizes") {
+        REQUIRE_NOTHROW(mWallet::reset(1.0, 0, &wallet.base));
+        REQUIRE_NOTHROW(mWallet::reset(1000.0, 0, &wallet.quote));
+        REQUIRE_NOTHROW(levels.fairValue = 500.0);
+        REQUIRE_NOTHROW(wallet.base.value = 3.0);
+        REQUIRE_NOTHROW(qp.percentageValues = true);
+        REQUIRE_NOTHROW(qp.sellSizePercentage = 10.0);
+        REQUIRE_NOTHROW(qp.buySizePercentage = 20.0);
+
+        WHEN("raw values") {
+          REQUIRE_NOTHROW(qp.percentageValues = false);
+          REQUIRE_NOTHROW(wallet.safety.calc());
+          REQUIRE(Approx(0.01) == wallet.safety.sellSize);
+          REQUIRE(Approx(0.02) == wallet.safety.buySize);
+        }
+
+        THEN("pct total value") {
+          REQUIRE_NOTHROW(qp.orderPctTotal = mOrderPctTotal::Value);
+          REQUIRE_NOTHROW(wallet.safety.calc());
+          REQUIRE(Approx(0.3) == wallet.safety.sellSize);
+          REQUIRE(Approx(0.6) == wallet.safety.buySize);
+        }
+
+        THEN("pct side balance") {
+          REQUIRE_NOTHROW(qp.orderPctTotal = mOrderPctTotal::Side);
+          REQUIRE_NOTHROW(wallet.safety.calc());
+          REQUIRE(Approx(0.1) == wallet.safety.sellSize);
+          REQUIRE(Approx(0.4) == wallet.safety.buySize);
+        }
+
+        THEN("with low tbp") {
+          REQUIRE_NOTHROW(wallet.target.targetBasePosition = 0.5);
+          REQUIRE_NOTHROW(qp.orderPctTotal = mOrderPctTotal::TBPValue);
+          REQUIRE_NOTHROW(wallet.safety.calc());
+          REQUIRE(Approx(0.3) == wallet.safety.sellSize);
+          REQUIRE(Approx(0.12) == wallet.safety.buySize);
+          REQUIRE_NOTHROW(qp.orderPctTotal = mOrderPctTotal::TBPSide);
+          REQUIRE_NOTHROW(wallet.safety.calc());
+          REQUIRE(Approx(0.1) == wallet.safety.sellSize);
+          REQUIRE(Approx(0.08) == wallet.safety.buySize);
+          REQUIRE_NOTHROW(qp.orderPctTotal = mOrderPctTotal::TBPStretch);
+          REQUIRE_NOTHROW(wallet.safety.calc());
+          REQUIRE(Approx(0.18) == wallet.safety.sellSize);
+          REQUIRE(Approx(0.24) == wallet.safety.buySize);
+          REQUIRE_NOTHROW(qp.orderPctTotal = mOrderPctTotal::TBPStretchSide);
+          REQUIRE_NOTHROW(wallet.safety.calc());
+          REQUIRE(Approx(0.03) == wallet.safety.sellSize);
+          REQUIRE(Approx(0.04) == wallet.safety.buySize);
+        }
+
+        THEN("with matched tbp") {
+          REQUIRE_NOTHROW(wallet.target.targetBasePosition = 1.0);
+          REQUIRE_NOTHROW(qp.orderPctTotal = mOrderPctTotal::TBPValue);
+          REQUIRE_NOTHROW(wallet.safety.calc());
+          REQUIRE(Approx(0.3) == wallet.safety.sellSize);
+          REQUIRE(Approx(0.3) == wallet.safety.buySize);
+          REQUIRE_NOTHROW(qp.orderPctTotal = mOrderPctTotal::TBPSide);
+          REQUIRE_NOTHROW(wallet.safety.calc());
+          REQUIRE(Approx(0.1) == wallet.safety.sellSize);
+          REQUIRE(Approx(0.2) == wallet.safety.buySize);
+          REQUIRE_NOTHROW(qp.orderPctTotal = mOrderPctTotal::TBPStretch);
+          REQUIRE_NOTHROW(wallet.safety.calc());
+          REQUIRE(Approx(0.15) == wallet.safety.sellSize);
+          REQUIRE(Approx(0.3) == wallet.safety.buySize);
+          REQUIRE_NOTHROW(qp.orderPctTotal = mOrderPctTotal::TBPStretchSide);
+          REQUIRE_NOTHROW(wallet.safety.calc());
+          REQUIRE(Approx(0.05) == wallet.safety.sellSize);
+          REQUIRE(Approx(0.1) == wallet.safety.buySize);
+        }
+
+        THEN("with 50\% tbp") {
+          REQUIRE_NOTHROW(wallet.target.targetBasePosition = 1.5);
+          REQUIRE_NOTHROW(qp.orderPctTotal = mOrderPctTotal::TBPValue);
+          REQUIRE_NOTHROW(wallet.safety.calc());
+          REQUIRE(Approx(0.3) == wallet.safety.sellSize);
+          REQUIRE(Approx(0.6) == wallet.safety.buySize);
+          REQUIRE_NOTHROW(qp.orderPctTotal = mOrderPctTotal::TBPSide);
+          REQUIRE_NOTHROW(wallet.safety.calc());
+          REQUIRE(Approx(0.1) == wallet.safety.sellSize);
+          REQUIRE(Approx(0.4) == wallet.safety.buySize);
+          REQUIRE_NOTHROW(qp.orderPctTotal = mOrderPctTotal::TBPStretch);
+          REQUIRE_NOTHROW(wallet.safety.calc());
+          REQUIRE(Approx(0.1) == wallet.safety.sellSize);
+          REQUIRE(Approx(0.4) == wallet.safety.buySize);
+          REQUIRE_NOTHROW(qp.orderPctTotal = mOrderPctTotal::TBPStretchSide);
+          REQUIRE_NOTHROW(wallet.safety.calc());
+          REQUIRE(Approx(0.05) == wallet.safety.sellSize);
+          REQUIRE(Approx(0.20) == wallet.safety.buySize);
+        }
+
+        THEN("with high tbp") {
+          REQUIRE_NOTHROW(wallet.target.targetBasePosition = 2.0);
+          REQUIRE_NOTHROW(qp.orderPctTotal = mOrderPctTotal::TBPValue);
+          REQUIRE_NOTHROW(wallet.safety.calc());
+          REQUIRE(Approx(0.15) == wallet.safety.sellSize);
+          REQUIRE(Approx(0.6) == wallet.safety.buySize);
+          REQUIRE_NOTHROW(qp.orderPctTotal = mOrderPctTotal::TBPSide);
+          REQUIRE_NOTHROW(wallet.safety.calc());
+          REQUIRE(Approx(0.05) == wallet.safety.sellSize);
+          REQUIRE(Approx(0.4) == wallet.safety.buySize);
+          REQUIRE_NOTHROW(qp.orderPctTotal = mOrderPctTotal::TBPStretch);
+          REQUIRE_NOTHROW(wallet.safety.calc());
+          REQUIRE(Approx(0.075) == wallet.safety.sellSize);
+          REQUIRE(Approx(0.45) == wallet.safety.buySize);
+          REQUIRE_NOTHROW(qp.orderPctTotal = mOrderPctTotal::TBPStretchSide);
+          REQUIRE_NOTHROW(wallet.safety.calc());
+          REQUIRE(Approx(0.025) == wallet.safety.sellSize);
+          REQUIRE(Approx(0.15) == wallet.safety.buySize);
+        }
+
+        REQUIRE_NOTHROW(qp.orderPctTotal = mOrderPctTotal::Value);
+        REQUIRE_NOTHROW(qp.percentageValues = false);
+      }
+    }
+
     GIVEN("mEwma") {
       levels.fairValue = 0;
       WHEN("defaults") {
