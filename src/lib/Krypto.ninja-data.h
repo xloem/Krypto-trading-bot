@@ -2605,10 +2605,10 @@ namespace ₿ {
       };
       void applyDepleted() {
         if (!quotes.bid.empty()
-          and wallet.quote.amount / quotes.bid.price < K.gateway->minSize * (1.0 + K.gateway->makeFee)
+          and wallet.quote.total / quotes.bid.price < K.gateway->minSize * (1.0 + K.gateway->makeFee)
         ) quotes.bid.clear(mQuoteState::DepletedFunds);
         if (!quotes.ask.empty()
-          and wallet.base.amount < K.gateway->minSize * (1.0 + K.gateway->makeFee)
+          and wallet.base.total < K.gateway->minSize * (1.0 + K.gateway->makeFee)
         ) quotes.ask.clear(mQuoteState::DepletedFunds);
       };
       void applyWaitingPing() {
