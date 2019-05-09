@@ -145,6 +145,8 @@ In the web UI, there are three rows of panels with cryptic looking names and edi
 
   * `TBPSide` - Percentage is taken of funds only on one side as in `Side`, but either the sell size or buy size is shrunk proportional to the distance from the TBP, such that balances will tend to migrate towards the TBP.  The math in this mode cancels itself such that when the TBP is met, the bid and ask sizes are the same.
 
+  * `TBPSide2` - Like `TBPSide`, but calculation is performed base on the _square_ of the funds.  This results in the order size that would move balance away from the TBP dropping off much more rapidly as the balances diverge from the TBP, which provides for many more trades before any balance is depleted.
+
   * `TBPStretch` - Percentage is taken of the total funds as in `Value`, but then both bids and asks are further scaled (without exceeding the user-provided values) based on which side of the TBP the balance is on, so as to buy more when below the TBP, and sell more when above.
 
   * `TBPStretchSide` - Percentage is taken of the lesser wallet balance and used for both sides, so as to have both properties of `TBPSide`: that when the TBP is met both bid and ask sizes are the same, and that the bid and ask sizes shrink as the wallet balance shrinks.  Both sizes are scaled proportional to the distance from the TBP as in `TBPStretch`.
