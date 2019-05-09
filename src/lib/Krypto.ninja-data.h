@@ -8,7 +8,7 @@ namespace ₿ {
     Top, Mid, Join, InverseJoin, InverseTop, HamelinRat, Depth
   };
   enum class mOrderPctTotal: unsigned int {
-    Value, Side, TBPValue, TBPSide, TBPStretch, TBPStretchSide
+    Value, Side, TBPValue, TBPSide, TBPSide2, TBPStretch, TBPStretchSide
   };
   enum class mQuotingSafety: unsigned int {
     Off, PingPong, PingPoing, Boomerang, AK47
@@ -1553,7 +1553,7 @@ namespace ₿ {
         if (qp.percentageValues) { 
           sellSize = qp.sellSizePercentage / 1e+2;
           buySize = qp.buySizePercentage / 1e+2;
-
+          
           switch (qp.orderPctTotal) {
           case mOrderPctTotal::Value: default:
           case mOrderPctTotal::TBPStretch:
@@ -1561,6 +1561,9 @@ namespace ₿ {
             sellSize *= wallets.base.value;
             buySize *= wallets.base.value;
             break;
+          case mOrderPctTotal::TBPSide2:
+            sellSize *= wallets.base.total / wallets.base.value;
+            buySize *= (wallets.base.value - wallets.base.total) / wallets.base.value;
           case mOrderPctTotal::Side:
           case mOrderPctTotal::TBPSide:
             sellSize *= wallets.base.total;
@@ -1576,6 +1579,12 @@ namespace ₿ {
           }
 
           switch (qp.orderPctTotal) {
+          case mOrderPctTotal::TBPSide2:
+            if (targetBasePosition < wallets.base.value / 2) {
+              buySize *= targetBasePosition / (wallets.base.value - targetBasePosition);
+            } else {
+              sellSize *= (wallets.base.value - targetBasePosition) / targetBasePosition;
+            }
           case mOrderPctTotal::TBPValue:
           case mOrderPctTotal::TBPSide:
             if (targetBasePosition < wallets.base.value / 2) {
