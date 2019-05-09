@@ -391,6 +391,9 @@ namespace ₿ {
       };
       mOrder *const upsert(const mOrder &raw) {
         mOrder *const order = findsert(raw);
+        if (order)
+          if (Status::Terminated == raw.status && order->status == Status::WaitingToWork)
+            exit("Order rejected !!", true);
         mOrder::update(raw, order);
         if (K.arg<int>("debug-orders")) {
           report(order, " saved ");
