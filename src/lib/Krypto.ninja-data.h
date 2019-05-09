@@ -1594,14 +1594,13 @@ namespace ₿ {
             buySize *= wallets.base.value - wallets.base.total;
             break;
           case mOrderPctTotal::TBPStretchSide:
-            Amount maxValue = targetBasePosition * 2 < wallets.base.value
-                ? targetBasePosition
-                : wallets.base.value - targetBasePosition;
+            Amount maxValue = wallets.base.total * 2 < wallets.base.value
+                ? wallets.base.total
+                : wallets.base.value - wallets.base.total;
             sellSize *= maxValue;
             buySize *= maxValue;
             break;
           }
-          // side we desire EXCESS on should have SMALLER sizes
 
           switch (qp.orderPctTotal) {
           case mOrderPctTotal::TBPValue:
