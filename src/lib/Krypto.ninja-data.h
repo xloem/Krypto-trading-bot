@@ -382,16 +382,22 @@ namespace ₿ {
       };
       mOrder *const upsert(const mOrder &raw) {
         mOrder *const order = findsert(raw);
-        if (order)
-          if (Status::Terminated == raw.status && order->status == Status::WaitingToWork)
-            exit("Order rejected !!", true);
         mOrder::update(raw, order);
         if (K.arg<int>("debug-orders")) {
           report(order, " saved ");
           report_size();
         }
-        if (order && order->status == Status::Rejected)
-          Print::logWar("GW", string("Order ") + order->orderId + " rejected");
+        if (order) {
+          static unsigned rejection_count = 0;
+          if (order->status == Status::Rejected) {
+            ++ rejection_count;
+            Print::logWar("GW", string("Order ") + order->orderId + " rejected");
+            if (rejection_count > 30)
+              throw std::runtime_error("many orders rejected !!!!!");
+          } else {
+            rejection_count = 0;
+          }
+        }
         return order;
       };
       const bool replace(const Price &price, const bool &isPong, mOrder *const order) {
