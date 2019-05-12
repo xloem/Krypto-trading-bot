@@ -399,14 +399,15 @@ namespace ₿ {
         if (order) {
           static unsigned rejection_count = 0;
           if (order->status == Status::Rejected) {
-            ++ rejection_count;
+            rejection_count = rejection_count + 2;
             json orderJson;
             to_json(orderJson, *static_cast<mTrade *>(order));
             Print::logWar("GW", string("Order ") + order->orderId + " rejected: " + orderJson.dump());
-            if (rejection_count > 30)
+            if (rejection_count > 60)
               throw std::runtime_error("many orders rejected !!!!!");
           } else {
-            rejection_count = 0;
+            if (rejection_count > 0)
+              -- rejection_count;
           }
         }
         return order;
