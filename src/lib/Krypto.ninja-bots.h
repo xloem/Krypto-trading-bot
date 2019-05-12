@@ -299,6 +299,11 @@ namespace ₿ {
       };
     private:
       static void halt(const int code) {
+        //string title = K.arg<string>("title");
+        //if (title.size() > 3 && string(".sh") == title.data() + title.size() - 3) {
+        //  string cmd = "{ sleep 3; K='" + K.arg<string>("title") + "' make stop start; } &";
+        //  system(cmd.c_str());
+        //}
         vector<function<void()>> happyEndingFn;
         endingFn.swap(happyEndingFn);
         for (const auto &it : happyEndingFn) it();
