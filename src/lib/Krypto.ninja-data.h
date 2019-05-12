@@ -402,7 +402,7 @@ namespace ₿ {
             rejection_count = rejection_count + 2;
             json orderJson;
             to_json(orderJson, *static_cast<mTrade *>(order));
-            Print::logWar("GW", string("Order ") + order->orderId + " rejected: " + orderJson.dump());
+            Print::logWar("GW", string("Order ") + order->orderId + " rejected x" + to_string(rejection_count / 2) + ": " + orderJson.dump());
             if (rejection_count > 60)
               throw std::runtime_error("many orders rejected !!!!!");
           } else {
