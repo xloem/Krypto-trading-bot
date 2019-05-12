@@ -390,12 +390,13 @@ namespace ₿ {
         if (order) {
           static unsigned rejection_count = 0;
           if (order->status == Status::Rejected) {
-            ++ rejection_count;
+            rejection_count = rejection_count + 2;
             Print::logWar("GW", string("Order ") + order->orderId + " rejected");
-            if (rejection_count > 30)
+            if (rejection_count > 60)
               throw std::runtime_error("many orders rejected !!!!!");
           } else {
-            rejection_count = 0;
+            if (rejection_count > 0)
+              -- rejection_count;
           }
         }
         return order;
