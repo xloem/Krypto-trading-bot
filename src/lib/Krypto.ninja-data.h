@@ -391,7 +391,7 @@ namespace ₿ {
           static unsigned rejection_count = 0;
           if (order->status == Status::Rejected) {
             rejection_count = rejection_count + 2;
-            Print::logWar("GW", string("Order ") + order->orderId + " rejected");
+            Print::logWar("GW", string("Order ") + order->orderId + " rejected x" + to_string(rejection_count / 2));
             if (rejection_count > 60)
               throw std::runtime_error("many orders rejected !!!!!");
           } else {
