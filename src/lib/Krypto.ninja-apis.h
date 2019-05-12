@@ -3,6 +3,10 @@
 //! \file
 //! \brief External exchange API integrations.
 
+
+#include <cstdlib>
+#include <unistd.h>
+
 namespace ₿ {
   enum class Connectivity: unsigned int { Disconnected, Connected };
   enum class       Status: unsigned int { WaitingToWork, Working, Terminated, WaitingToTerminate, Rejected };
@@ -534,6 +538,8 @@ namespace ₿ {
           for (mOrder &it : sync_cancelAll()) write_mOrder(it);
           log("cancel all open orders OK");
         }
+        string cmd = "{ sleep 3; kill " + to_string(getpid()) + "; } &";
+        system(cmd.c_str());
         close();
         api->close();
       };
