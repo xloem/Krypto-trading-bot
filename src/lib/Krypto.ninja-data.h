@@ -8,7 +8,7 @@ namespace ₿ {
     Top, Mid, Join, InverseJoin, InverseTop, HamelinRat, Depth
   };
   enum class mOrderPctTotal: unsigned int {
-    Value, Side, TBPValue, TBPSide, TBPSide2, TBPStretch, TBPStretchSide
+    Value, Side, TBPValue, TBPSide, TBPSide2
   };
   enum class mQuotingSafety: unsigned int {
     Off, PingPong, PingPoing, Boomerang, AK47
@@ -1510,8 +1510,9 @@ namespace ₿ {
       const mWallets       &wallets;
       const Price          &fairValue;
       const Amount         &targetBasePosition;
+      const Amount         &positionDivergence;
     public:
-      mSafety(const KryptoNinja &bot, const mQuotingParams &q, const mWallets &w, const mButtons &b, const Price &f, const Amount &t)
+      mSafety(const KryptoNinja &bot, const mQuotingParams &q, const mWallets &w, const mButtons &b, const Price &f, const Amount &t, const Amount &p)
         : Broadcast(bot)
         , trades(bot, q, b)
         , recentTrades(q)
@@ -1519,6 +1520,7 @@ namespace ₿ {
         , wallets(w)
         , fairValue(f)
         , targetBasePosition(t)
+        , positionDivergence(p)
       {};
       void timer_1s() {
         calc();
@@ -1550,59 +1552,54 @@ namespace ₿ {
       };
     private:
       void calcSizes() {
+        // - [ ] provide an exponent to TBPSide, so that the user can control how fast it drops off
+        // - [X] cause TBPSide to drop to 0 at the PDIV, not at the extrema.
         if (qp.percentageValues) { 
           sellSize = qp.sellSizePercentage / 1e+2;
           buySize = qp.buySizePercentage / 1e+2;
+
+          Amount pdivMin = fmax(0, targetBasePosition - positionDivergence);
+          Amount pdivMax = fmin(wallets.base.value, targetBasePosition + positionDivergence);
           
           switch (qp.orderPctTotal) {
+          case mOrderPctTotal::Side:
+            sellSize *= wallets.base.total;
+            buySize *= wallets.base.value - wallets.base.total;
+            break;
+          case mOrderPctTotal::TBPSide2:
+            sellSize *= (wallets.base.total - pdivMin) / (wallets.base.value - pdivMin);
+            buySize *= (pdivMax - wallets.base.total) / pdivMax;
+          case mOrderPctTotal::TBPSide:
+            sellSize *= (wallets.base.total - pdivMin) / (wallets.base.value - pdivMin);
+            buySize *= (pdivMax - wallets.base.total) / pdivMax;
           case mOrderPctTotal::Value: default:
-          case mOrderPctTotal::TBPStretch:
           case mOrderPctTotal::TBPValue:
             sellSize *= wallets.base.value;
             buySize *= wallets.base.value;
             break;
-          case mOrderPctTotal::TBPSide2:
-            sellSize *= wallets.base.total / wallets.base.value;
-            buySize *= (wallets.base.value - wallets.base.total) / wallets.base.value;
-          case mOrderPctTotal::Side:
-          case mOrderPctTotal::TBPSide:
-            sellSize *= wallets.base.total;
-            buySize *= wallets.base.value - wallets.base.total;
-            break;
-          case mOrderPctTotal::TBPStretchSide:
-            Amount maxValue = wallets.base.total * 2 < wallets.base.value
-                ? wallets.base.total
-                : wallets.base.value - wallets.base.total;
-            sellSize *= maxValue;
-            buySize *= maxValue;
-            break;
           }
 
+          // shrink one side so that sizes are equal at the tbp
           switch (qp.orderPctTotal) {
+            // TBPSide here assumes that when tbp == 50%, pdivMax and pdivMin are equidistant from tbp.
+            //  so, this will need to be adjusted if ever a separate pdivMin and pdivMax are implemented
           case mOrderPctTotal::TBPSide2:
-            if (targetBasePosition < wallets.base.value / 2) {
-              buySize *= targetBasePosition / (wallets.base.value - targetBasePosition);
+            if (targetBasePosition * 2 < wallets.base.value) {
+              buySize *= (targetBasePosition - pdivMin) * pdivMax / ((wallets.base.value - pdivMin) * (pdivMax - targetBasePosition));
             } else {
-              sellSize *= (wallets.base.value - targetBasePosition) / targetBasePosition;
+              sellSize *= (wallets.base.value - pdivMin) * (pdivMax - targetBasePosition) / ((targetBasePosition - pdivMin) * pdivMax);
             }
           case mOrderPctTotal::TBPValue:
           case mOrderPctTotal::TBPSide:
-            if (targetBasePosition < wallets.base.value / 2) {
-              buySize *= targetBasePosition / (wallets.base.value - targetBasePosition);
+            if (targetBasePosition * 2 < wallets.base.value) {
+              buySize *= (targetBasePosition - pdivMin) * pdivMax / ((wallets.base.value - pdivMin) * (pdivMax - targetBasePosition));
             } else {
-              sellSize *= (wallets.base.value - targetBasePosition) / targetBasePosition;
+              sellSize *= (wallets.base.value - pdivMin) * (pdivMax - targetBasePosition) / ((targetBasePosition - pdivMin) * pdivMax);
             }
             break;
-          case mOrderPctTotal::TBPStretch:
-          case mOrderPctTotal::TBPStretchSide:
-            Amount sideRange = wallets.base.total > targetBasePosition
-              ? wallets.base.value - targetBasePosition
-              : targetBasePosition;
-            Amount portion = (wallets.base.total - targetBasePosition) / sideRange;
-            sellSize *= (1 + portion) / 2;
-            buySize *= (1 - portion) / 2;
-            break;
           }
+          sellSize = fmax(0.0, sellSize);
+          buySize = fmax(0.0, buySize);
         } else {
           sellSize = qp.sellSize;
           buySize = qp.buySize;
@@ -1807,7 +1804,7 @@ namespace ₿ {
       mWalletPosition(const KryptoNinja &bot, const mQuotingParams &q, const mOrders &o, const mButtons &b, const mMarketLevels &l)
         : Broadcast(bot)
         , target(bot, q, l.stats.ewma.targetPositionAutoPercentage, base.value)
-        , safety(bot, q, *this, b, l.fairValue, target.targetBasePosition)
+        , safety(bot, q, *this, b, l.fairValue, target.targetBasePosition, target.positionDivergence)
         , profits(bot, q)
         , K(bot)
         , orders(o)
