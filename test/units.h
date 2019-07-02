@@ -775,6 +775,7 @@ namespace ₿ {
             if (trade.Kdiff) {
               actualDiff += diff;
               expectedDiff += trade.Kdiff;
+              REQUIRE(trade.Kdiff > 0);
             }
           }
           REQUIRE(abs(actualBaseDelta - expectedBaseDelta) < 0.000000000001);
