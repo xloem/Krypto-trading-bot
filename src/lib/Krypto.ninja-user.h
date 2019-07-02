@@ -8,7 +8,7 @@ namespace ₿ {
     Top, Mid, Join, InverseJoin, InverseTop, HamelinRat, Depth
   };
   enum class mOrderPctTotal: unsigned int {
-    Value, Side, TBPValue, TBPSide, TBPSide2
+    Value, Side, TBPValue, TBPSide
   };
   enum class mQuotingSafety: unsigned int {
     Off, PingPong, PingPoing, Boomerang, AK47
@@ -62,6 +62,7 @@ namespace ₿ {
     bool              bestWidth                       = true;
     Amount            bestWidthSize                   = 0;
     mOrderPctTotal    orderPctTotal                   = mOrderPctTotal::Value;
+    double            tradeSizeTBPExp                 = 2.0;
     Amount            buySize                         = 0.02;
     double            buySizePercentage               = 7.0;
     bool              buySizeMax                      = false;
@@ -145,6 +146,7 @@ namespace ₿ {
         bestWidth                       =                            j.value("bestWidth", bestWidth);
         bestWidthSize                   = fmax(0,                    j.value("bestWidthSize", bestWidthSize));
         orderPctTotal                   =                            j.value("orderPctTotal", orderPctTotal);
+        tradeSizeTBPExp                 =                            j.value("tradeSizeTBPExp", tradeSizeTBPExp);
         buySize                         = fmax(K.gateway->minSize,   j.value("buySize", buySize));
         buySizePercentage               = fmin(1e+2, fmax(1e-3,      j.value("buySizePercentage", buySizePercentage)));
         buySizeMax                      =                            j.value("buySizeMax", buySizeMax);
@@ -244,6 +246,7 @@ namespace ₿ {
       {                      "bestWidth", k.bestWidth                      },
       {                  "bestWidthSize", k.bestWidthSize                  },
       {                  "orderPctTotal", k.orderPctTotal                  },
+      {                "tradeSizeTBPExp", k.tradeSizeTBPExp                },
       {                        "buySize", k.buySize                        },
       {              "buySizePercentage", k.buySizePercentage              },
       {                     "buySizeMax", k.buySizeMax                     },
@@ -1575,11 +1578,8 @@ namespace ₿ {
             sellSize *= wallets.base.total;
             buySize *= wallets.base.value - wallets.base.total;
             break;
-          case mOrderPctTotal::TBPSide2:
-            sellSize *= (wallets.base.total - pdivMin) / (wallets.base.value - pdivMin);
-            buySize *= (pdivMax - wallets.base.total) / pdivMax;
           case mOrderPctTotal::TBPSide:
-            sellSize *= (wallets.base.total - pdivMin) / (wallets.base.value - pdivMin);
+            sellSize *= pow((wallets.base.total - pdivMin) / (wallets.base.value - pdivMin), qp.tradeSizeTBPExp);
             buySize *= (pdivMax - wallets.base.total) / pdivMax;
           case mOrderPctTotal::Value: default:
           case mOrderPctTotal::TBPValue:
@@ -1589,21 +1589,17 @@ namespace ₿ {
           }
 
           // shrink one side so that sizes are equal at the tbp
+          double expamt = qp.tradeSizeTBPExp;
           switch (qp.orderPctTotal) {
             // TBPSide here assumes that when tbp == 50%, pdivMax and pdivMin are equidistant from tbp.
             //  so, this will need to be adjusted if ever a separate pdivMin and pdivMax are implemented
-          case mOrderPctTotal::TBPSide2:
-            if (targetBasePosition * 2 < wallets.base.value) {
-              buySize *= (targetBasePosition - pdivMin) * pdivMax / ((wallets.base.value - pdivMin) * (pdivMax - targetBasePosition));
-            } else {
-              sellSize *= (wallets.base.value - pdivMin) * (pdivMax - targetBasePosition) / ((targetBasePosition - pdivMin) * pdivMax);
-            }
           case mOrderPctTotal::TBPValue:
+            expamt = 1;
           case mOrderPctTotal::TBPSide:
             if (targetBasePosition * 2 < wallets.base.value) {
-              buySize *= (targetBasePosition - pdivMin) * pdivMax / ((wallets.base.value - pdivMin) * (pdivMax - targetBasePosition));
+              buySize *= pow((targetBasePosition - pdivMin) * pdivMax / ((wallets.base.value - pdivMin) * (pdivMax - targetBasePosition)), expamt);
             } else {
-              sellSize *= (wallets.base.value - pdivMin) * (pdivMax - targetBasePosition) / ((targetBasePosition - pdivMin) * pdivMax);
+              sellSize *= pow((wallets.base.value - pdivMin) * (pdivMax - targetBasePosition) / ((targetBasePosition - pdivMin) * pdivMax), expamt);
             }
             break;
           }
