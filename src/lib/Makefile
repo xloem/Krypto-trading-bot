@@ -6,13 +6,13 @@ V_ZLIB  = 1.2.11
 V_SSL   = 1.1.1b
 V_ARES  = 1.15.0
 V_CURL  = 7.64.1
-V_SQL   = 3270200
+V_SQL   = 3280000
 V_NCUR  = 6.1
 V_JSON  = 3.6.1
-V_CATCH = 2.7.0
+V_CATCH = 2.7.2
 V_UWS   = 0.14.8
 V_QF    = 1.15.1
-V_UV    = 1.27.0
+V_UV    = 1.28.0
 
 KBUILD := $(abspath ../../build-$(KHOST))
 
@@ -20,7 +20,7 @@ all dist:
 	@mkdir -vp $(KBUILD)
 	$(MAKE) zlib openssl ares curl sqlite ncurses json catch uws quickfix libuv
 ifdef TRAVIS_OS_NAME
-	$(MAKE) pvs
+	$(MAKE) lcov pvs
 endif
 
 clean:
@@ -97,8 +97,7 @@ uws:
 	| tar xz -C $(KBUILD) && rm -rf $(KBUILD)/local/include/uWS                             \
 	&& mkdir -p $(KBUILD)/local/include/uWS                                                 \
 	&& cp $(KBUILD)/uWebSockets-$(V_UWS)/src/* $(KBUILD)/local/include/uWS/                 \
-	&& sed -i "s/SSL_library_init()/OPENSSL_init_ssl(0, NULL)/"                             \
-	$(KBUILD)/local/include/uWS/Networking.cpp && (test -n "`echo $(CHOST) | grep mingw32`" \
+	&& (test -n "`echo $(CHOST) | grep mingw32`"                                            \
 	&& (sed -i "s/W\(s2tcpip\)/w\1/" $(KBUILD)/local/include/uWS/Networking.h               \
 	&& sed -i "s/WinSock2/winsock2/" $(KBUILD)/local/include/uWS/Networking.h               \
 	&& sed -i "s/uv_.*/return {0, \"\", \"\"};/" $(KBUILD)/local/include/uWS/Socket.cpp     \
@@ -148,4 +147,13 @@ else
 	&& chmod +x install.sh && sudo ./install.sh                      )
 endif
 
-.PHONY: all dist clean zlib openssl curl sqlite ncurses json catch uws quickfix libuv pvs
+lcov:
+ifndef V_LCOV
+	$(MAKE) $@ V_LCOV=$(shell curl -s https://api.github.com/repos/linux-test-project/lcov/releases/latest | grep name | grep -v 'tag\|lcov' | cut -d '"' -f4)
+else
+	test -d $(KBUILD)/lcov-$(V_LCOV) || (                                                                 \
+	curl -L https://github.com/linux-test-project/lcov/releases/download/v$(V_LCOV)/lcov-$(V_LCOV).tar.gz \
+	| tar xz -C $(KBUILD) && cd $(KBUILD)/lcov-$(V_LCOV) && sudo make install                             )
+endif
+
+.PHONY: all dist clean zlib openssl curl sqlite ncurses json catch uws quickfix libuv lcov pvs
