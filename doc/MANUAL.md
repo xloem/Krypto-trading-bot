@@ -145,7 +145,7 @@ In the web UI, there are three rows of panels with cryptic looking names and edi
 
   * `TBPSide` - Percentage is taken of funds only on one side as in `Side`, but balance is taken relative to the `pDiv` extents such that they are not crossed, and either the sell size or buy size is shrunk proportional to the distance from the TBP, such that balances will tend to migrate towards the TBP.  The math in this mode cancels itself such that when the TBP is met, the bid and ask sizes are the same.
 
-  * `TBPSide2` - Like `TBPSide`, but calculation is performed based on the _square_ of the funds.  This results in the order size that would move balance away from the TBP dropping off much more rapidly as the balances diverge from the TBP, which provides for many more trades before any balance is depleted.
+* `exp` - If `TBPSide` is used for `orderPctTot`, this specifies the exponent to raise the size multipliers by.  The higher the number, the more the sizes will shrink as balance passes the TBP.
 
 * `bidSize` - Maximum bid size of our quote in BTC (ex. a value of 1.5 is 1.5 bitcoins). If `%` is enabled, then this is the maximum bid size as a % as specified in `orderPctTot`. With the exception for when `apr` is checked and the system is aggressively rebalancing positions after they get out of whack.
 
