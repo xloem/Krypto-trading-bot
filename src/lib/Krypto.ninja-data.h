@@ -1032,7 +1032,7 @@ namespace ₿ {
         );
       };
       const double calcDiffPercent(Amount older, Amount newer) const {
-        return K.gateway->decimal.percent.truncate(((newer - older) / newer) * 1e+2);
+        return K.gateway->decimal.percent.round(((newer - older) / newer) * 1e+2);
       };
       const mMatter about() const override {
         return mMatter::Profit;
@@ -1285,16 +1285,13 @@ namespace ₿ {
             : qp.widthPong;
           map<Price, string> matches;
           for (mOrderFilled &it : rows)
-            if (it.quantity - it.Kqty > 0
-              and it.side != filled.side
-              and (qp.pongAt == mPongAt::AveragePingFair
-                or qp.pongAt == mPongAt::AveragePingAggressive
-                or (filled.side == Side::Bid
-                  ? (it.price > filled.price + widthPong)
-                  : (it.price < filled.price - widthPong)
-                )
-              )
-            ) matches[it.price] = it.tradeId;
+            if (it.quantity - it.Kqty > 0 and it.side != filled.side) {
+              const Price combinedFee = K.gateway->makeFee * (it.price + filled.price);
+              if (filled.side == Side::Bid
+                  ? (it.price > filled.price + widthPong + combinedFee)
+                  : (it.price < filled.price - widthPong - combinedFee)
+              ) matches[it.price] = it.tradeId;
+            }
           matchPong(
             matches,
             filled,
@@ -1664,7 +1661,7 @@ namespace ₿ {
       {};
       void calcTargetBasePos() {
         if (warn_empty()) return;
-        targetBasePosition = K.gateway->decimal.amount.truncate(
+        targetBasePosition = K.gateway->decimal.amount.round(
           qp.autoPositionMode == mAutoPositionMode::Manual
             ? (qp.percentageValues
               ? qp.targetBasePositionPercentage * baseValue / 1e+2
@@ -1712,7 +1709,7 @@ namespace ₿ {
           else if (mPDivMode::SQRT == qp.positionDivergenceMode)   positionDivergence = pDivMin + (sqrt(divCenter) * (pDiv - pDivMin));
           else if (mPDivMode::Switch == qp.positionDivergenceMode) positionDivergence = divCenter < 1e-1 ? pDivMin : pDiv;
         }
-        positionDivergence = K.gateway->decimal.amount.truncate(positionDivergence);
+        positionDivergence = K.gateway->decimal.amount.round(positionDivergence);
       };
       void report() const {
         Print::log("PG", "TBP: "
@@ -2305,26 +2302,28 @@ namespace ₿ {
           ? qp.widthPongPercentage * levels.fairValue / 100
           : qp.widthPong;
         if (!quotes.ask.empty() and wallet.safety.buyPing) {
+          const Price sellPong = (wallet.safety.buyPing * (1 + K.gateway->makeFee) + widthPong) / (1 - K.gateway->makeFee);
           if ((qp.aggressivePositionRebalancing == mAPR::SizeWidth and sideAPR == mSideAPR::Sell)
             or ((qp.safety == mQuotingSafety::PingPong or qp.safety == mQuotingSafety::PingPoing)
-              ? quotes.ask.price < wallet.safety.buyPing + widthPong
+              ? quotes.ask.price < sellPong
               : qp.pongAt == mPongAt::ShortPingAggressive
                 or qp.pongAt == mPongAt::AveragePingAggressive
                 or qp.pongAt == mPongAt::LongPingAggressive
             )
-          ) quotes.ask.price = wallet.safety.buyPing + widthPong;
-          quotes.ask.isPong = quotes.ask.price >= wallet.safety.buyPing + widthPong;
+          ) quotes.ask.price = max(levels.bids.at(0).price + K.gateway->minTick, sellPong);
+          quotes.ask.isPong = quotes.ask.price >= sellPong;
         }
         if (!quotes.bid.empty() and wallet.safety.sellPing) {
+          const Price buyPong = (wallet.safety.sellPing * (1 - K.gateway->makeFee) - widthPong) / (1 + K.gateway->makeFee);
           if ((qp.aggressivePositionRebalancing == mAPR::SizeWidth and sideAPR == mSideAPR::Buy)
             or ((qp.safety == mQuotingSafety::PingPong or qp.safety == mQuotingSafety::PingPoing)
-              ? quotes.bid.price > wallet.safety.sellPing - widthPong
+              ? quotes.bid.price > buyPong
               : qp.pongAt == mPongAt::ShortPingAggressive
                 or qp.pongAt == mPongAt::AveragePingAggressive
                 or qp.pongAt == mPongAt::LongPingAggressive
             )
-          ) quotes.bid.price = wallet.safety.sellPing - widthPong;
-          quotes.bid.isPong = quotes.bid.price <= wallet.safety.sellPing - widthPong;
+          ) quotes.bid.price = min(levels.asks.at(0).price - K.gateway->minTick, buyPong);
+          quotes.bid.isPong = quotes.bid.price <= buyPong;
         }
       };
       void applyAK47Increment() {
@@ -2346,24 +2345,22 @@ namespace ₿ {
           for (const mLevel &it : levels.asks)
             if (it.price > quotes.ask.price) {
               depth += it.size;
-              if (depth < bestWidthSize) continue;
+              if (depth <= bestWidthSize) continue;
               const Price bestAsk = it.price - K.gateway->minTick;
-              if (bestAsk >= quotes.ask.price) {
+              if (bestAsk > quotes.ask.price)
                 quotes.ask.price = bestAsk;
-                break;
-              }
+              break;
             }
         depth = 0;
         if (!quotes.bid.empty())
           for (const mLevel &it : levels.bids)
             if (it.price < quotes.bid.price) {
               depth += it.size;
-              if (depth < bestWidthSize) continue;
+              if (depth <= bestWidthSize) continue;
               const Price bestBid = it.price + K.gateway->minTick;
-              if (bestBid <= quotes.bid.price) {
+              if (bestBid < quotes.bid.price)
                 quotes.bid.price = bestBid;
-                break;
-              }
+              break;
             }
       };
       void applyTradesPerMinute() {
@@ -2380,39 +2377,40 @@ namespace ₿ {
         if (!quotes.bid.empty())
           quotes.bid.price = fmax(
             0,
-            floor(quotes.bid.price / K.gateway->minTick) * K.gateway->minTick
+            round(quotes.bid.price / K.gateway->minTick) * K.gateway->minTick
           );
         if (!quotes.ask.empty())
           quotes.ask.price = fmax(
             quotes.bid.price + K.gateway->minTick,
-            ceil(quotes.ask.price / K.gateway->minTick) * K.gateway->minTick
+            round(quotes.ask.price / K.gateway->minTick) * K.gateway->minTick
           );
       };
       void applyRoundSize() {
         if (!quotes.bid.empty())
-          quotes.bid.size = K.gateway->decimal.amount.truncate(
+          quotes.bid.size = K.gateway->decimal.amount.round(
             fmax(K.gateway->minSize, fmin(
               quotes.bid.size,
-              (K.gateway->decimal.price.truncate(wallet.quote.total) * (1 - K.gateway->takeFee)) / quotes.bid.price
+              K.gateway->decimal.amount.floor(
+                wallet.quote.total / (quotes.bid.price * (1.0 + K.gateway->makeFee))
+              )
             ))
           );
         if (!quotes.ask.empty())
-          quotes.ask.size = K.gateway->decimal.amount.truncate(
+          quotes.ask.size = K.gateway->decimal.amount.round(
             fmax(K.gateway->minSize, fmin(
               quotes.ask.size,
-              wallet.base.total
+              K.gateway->decimal.amount.floor(
+                wallet.base.total
+              )
             ))
           );
       };
       void applyDepleted() {
-        const double epsilon = pow(10, -1 * K.gateway->decimal.amount.stream.precision());
         if (!quotes.bid.empty()
-          and abs(quotes.bid.size - (K.gateway->decimal.price.truncate(wallet.quote.total) / quotes.bid.price)) > epsilon
-          and quotes.bid.size > K.gateway->decimal.price.truncate(wallet.quote.total) / quotes.bid.price
+          and wallet.quote.total / quotes.bid.price < K.gateway->minSize * (1.0 + K.gateway->makeFee)
         ) quotes.bid.clear(mQuoteState::DepletedFunds);
         if (!quotes.ask.empty()
-          and abs(quotes.ask.size - wallet.base.total) > epsilon
-          and quotes.ask.size > wallet.base.total
+          and wallet.base.total < K.gateway->minSize * (1.0 + K.gateway->makeFee)
         ) quotes.ask.clear(mQuoteState::DepletedFunds);
       };
       void applyWaitingPing() {
@@ -2596,7 +2594,7 @@ namespace ₿ {
           {       "base", K.gateway->base            },
           {      "quote", K.gateway->quote           },
           {    "minTick", K.gateway->minTick         },
-          {       "inet", string(Curl::inet ?: "")   },
+          {       "inet", K.arg<string>("interface") },
           {"environment", K.arg<string>("title")     },
           { "matryoshka", K.arg<string>("matryoshka")}
         };
