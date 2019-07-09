@@ -123,11 +123,12 @@ namespace ₿ {
         if (K.gateway) return;
         silent();
         K.gateway = Gw::new_Gw("NULL");
-        K.gateway->exchange = "NULL";
-        K.gateway->base     = "BTC";
-        K.gateway->quote    = "EUR";
-        K.gateway->minTick  = 0.01;
-        K.gateway->minSize  = 0.001;
+        K.gateway->exchange  = "NULL";
+        K.gateway->base      = "BTC";
+        K.gateway->quote     = "EUR";
+        K.gateway->tickPrice = 0.01;
+        K.gateway->tickSize  = 0.001;
+        K.gateway->minSize   = 0.001;
         K.gateway->report({}, false);
         K.gateway->write_Connectivity = [&](const Connectivity &rawdata) {
           broker.semaphore.read_from_gw(rawdata);
@@ -470,9 +471,7 @@ namespace ₿ {
         REQUIRE(broker.calculon.quotes.bid.state == mQuoteState::Disconnected);
         REQUIRE(broker.calculon.quotes.ask.state == mQuoteState::Disconnected);
         REQUIRE_NOTHROW(broker.clear());
-        REQUIRE(broker.calculon.quotes.bid.state == mQuoteState::MissingData);
-        REQUIRE(broker.calculon.quotes.ask.state == mQuoteState::MissingData);
-        REQUIRE_NOTHROW(K.gateway->ready(nullptr));
+        REQUIRE_NOTHROW(K.gateway->ready());
         REQUIRE(broker.ready());
         REQUIRE_FALSE(levels.ready());
         REQUIRE_NOTHROW(levels.read_from_gw({ {
