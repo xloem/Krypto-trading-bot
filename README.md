@@ -1,3 +1,5 @@
+<p align="center">when <a href="http://catalannews.com/catalan-trial/item/jailed-leaders-share-closing-remarks-on-final-day-of-catalan-trial">injustice</a> becomes law, <a href="https://www.youtube.com/watch?v=CJV6EqZBlsc">resistance</a> becomes duty.<br /><br />come and see for yourself at <a href="https://spanishpolice.github.io/">https://spanishpolice.github.io/</a><br /><br /><img src="https://user-images.githubusercontent.com/1634027/60388447-f7469e00-9ab1-11e9-933c-5e3ce6520328.jpg" /><br />We will do it <b>again!</b><br /><br />(if this makes you sad, you can <a href="https://www.youtube.com/watch?v=0E1bNmyPWww">follow the sun</a>;<br>non-violence allows for tomorrow to be a new day for <b>everyone</b>)</p><br /><br /><br /><br /><br /><br /><br />
+
 <img align="left" src="https://user-images.githubusercontent.com/1634027/36237231-e611590e-11fa-11e8-8486-6675078501dc.jpg" /><p align="right">self reminder:<br><b>patience is the mother of science</b></p><br><a href="http://ciutatrefugi.barcelona/en/welcome-barcelona">\*\*\* REFUGEES WELCOME! \*\*\*</a><br/>&thinsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="http://missingmigrants.iom.int/">\*\*\* FATAL ROUTES? \*\*\*</a>
 <br clear="left">
 
@@ -59,7 +61,6 @@ All currency pairs are supported.
   - [Changelogs](#unreleased-changelog)
 - Humans and Milk Mammals
   - [Unlock](#unlock)
-  - [Trading for Fun](#trading-for-fun)
   - [Donations](#donations)
   - [Very Special Thanks](#very-special-thanks-to)
   - [General Discussion](#general-discussion)
@@ -250,7 +251,13 @@ js sandbox: [jsfiddle.net](https://jsfiddle.net)
 
 ws sandbox: [websocket.org](https://www.websocket.org/echo.html)
 
-<details><summary><a id="unreleased-changelog"><b>Unreleased v0.4.x Changelog</b></a></summary>
+<details><summary><a id="unreleased-changelog"><b>Release v0.5.x Changelog</b></a></summary>
+
+Updated exchange integrations as simple libcurl wrappers.
+
+</details>
+
+<details><summary><b>Release v0.4.x Changelog</b></summary>
 
 Added main KryptoNinja class derived from all other classes and ready to be extended.
 
@@ -271,7 +278,7 @@ Added build chain for win32.
 Added build chain for OSX v10.13.
 </details>
 
-<details><summary><b>Release v0.4.0 Changelog</b></summary>
+<details><summary><b>Release v0.3.x Changelog</b></summary>
 
 Updated HitBTC API v2.
 
@@ -294,7 +301,7 @@ Added built-in SQLite C++ interface to replace external mongodb server.
 Added Poloniex API.
 </details>
 
-<details><summary><b>Release v0.3.0 Changelog</b></summary>
+<details><summary><b>Release v0.2.x Changelog</b></summary>
 
 Updated application name to K because of Kira.
 
@@ -319,9 +326,6 @@ Updated Bitfinex API v2.
 Added Coinbase FIX API.
 
 ~~Added Korbit API.~~
-</details>
-
-<details><summary><b>Release v0.2.0 Changelog</b></summary>
 
 Added new quoting styles PingPong, Boomerang, AK-47.
 
@@ -343,17 +347,11 @@ see the upstream project [michaelgrosner/tribeca](https://github.com/michaelgros
 
 The bot is unlocked for collaborators and contributors (feel free to make acceptable Pull Requests for already opened issues or for anything you consider useful, and let me know the BTC Payment Address for the bot that you wish to unlock in the description of the PR, and I will credit it for you).
 
-While locked, you are limited to using the first 3 market levels; once unlocked the bot reads the full list (up to thousands) of market levels from the exchange.
+While locked, the orderbook will be not in realtime, instead market price levels will be updated only once every 7 seconds.
 
-Anonymous users can also unlock any API Key by paying 0.01210000 BTC to the address displayed in the UI of the bot. Once unlocked you may use different currency pairs or reinstall on a different machine with the same unlocked API Key. However, if you want to use more than one exchange, you will need to pay again to unlock the API Key for each exchange.
+Anonymous users can also unlock any API Key by paying 0.01210000 BTC to the address displayed. Once unlocked you may use different currency pairs or reinstall on a different machine with the same unlocked API Key. However, if you want to use more than one exchange, you will need to pay again to unlock the API Key for each exchange.
 
 Otherwise if you choose to not support further development by ctubio, just keep running some old commit and do not upgrade (any commit prior to v0.3.0 was completely unlocked).
-
-### Trading for Fun
-
-Use `--free-version` argument to anonymously unlock any API Key and avoid the payment.
-
-All market levels will be visible and usable but not in realtime, instead will be slowdown around 7 seconds doing nothing.
 
 Please don't open issues asking how much % less the bot generates with `--free-version`; it is relative to your trading strategy, the market conditions, and the bot's performance.
 

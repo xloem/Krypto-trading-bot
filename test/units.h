@@ -123,11 +123,12 @@ namespace ₿ {
         if (K.gateway) return;
         silent();
         K.gateway = Gw::new_Gw("NULL");
-        K.gateway->exchange = "NULL";
-        K.gateway->base     = "BTC";
-        K.gateway->quote    = "EUR";
-        K.gateway->minTick  = 0.01;
-        K.gateway->minSize  = 0.001;
+        K.gateway->exchange  = "NULL";
+        K.gateway->base      = "BTC";
+        K.gateway->quote     = "EUR";
+        K.gateway->tickPrice = 0.01;
+        K.gateway->tickSize  = 0.001;
+        K.gateway->minSize   = 0.001;
         K.gateway->report({}, false);
         K.gateway->write_Connectivity = [&](const Connectivity &rawdata) {
           broker.semaphore.read_from_gw(rawdata);
@@ -173,7 +174,7 @@ namespace ₿ {
           REQUIRE(levels.stats.fairPrice.blob().dump() == "{\"price\":1234.55}");
         });
         REQUIRE_NOTHROW(qp.fvModel = mFairValueModel::BBO);
-        vector<RandId> randIds;
+        vector<string> randIds;
         REQUIRE_NOTHROW(randIds.push_back(Random::uuid36Id()));
         REQUIRE_NOTHROW(orders.upsert({Side::Bid, 1234.52, 0.34567890, Tstamp, false, randIds.back()}));
         REQUIRE_NOTHROW(orders.upsert({(Side)0, 0, 0, Tstamp, false, randIds.back(), "", Status::Working, 0}));
@@ -413,7 +414,7 @@ namespace ₿ {
       WHEN("assigned") {
         for (mOrder *const it : orders.working())
           orders.purge(it);
-        vector<RandId> randIds;
+        vector<string> randIds;
         const Clock time = Tstamp;
         REQUIRE_NOTHROW(randIds.push_back(Random::uuid36Id()));
         REQUIRE_NOTHROW(orders.upsert({Side::Bid, 1234.50, 0.12345678, time-69, false, randIds.back()}));
@@ -470,9 +471,7 @@ namespace ₿ {
         REQUIRE(broker.calculon.quotes.bid.state == mQuoteState::Disconnected);
         REQUIRE(broker.calculon.quotes.ask.state == mQuoteState::Disconnected);
         REQUIRE_NOTHROW(broker.clear());
-        REQUIRE(broker.calculon.quotes.bid.state == mQuoteState::MissingData);
-        REQUIRE(broker.calculon.quotes.ask.state == mQuoteState::MissingData);
-        REQUIRE_NOTHROW(K.gateway->ready(nullptr));
+        REQUIRE_NOTHROW(K.gateway->ready());
         REQUIRE(broker.ready());
         REQUIRE_FALSE(levels.ready());
         REQUIRE_NOTHROW(levels.read_from_gw({ {

@@ -21,13 +21,13 @@ namespace ₿ {
   class Ansi {
     public:
       static int colorful;
-      static const string reset() {
+      static string reset() {
           return paint(0, -1);
       };
-      static const string r(const int &color) {
+      static string r(const int &color) {
           return paint(0, color);
       };
-      static const string b(const int &color) {
+      static string b(const int &color) {
           return paint(1, color);
       };
       static void default_colors() {
@@ -51,7 +51,7 @@ namespace ₿ {
         );
       };
     private:
-      static const string paint(const int &style, const int &color) {
+      static string paint(const int &style, const int &color) {
         return colorful
           ? "\033["
             + to_string(style)
@@ -86,7 +86,7 @@ namespace ₿ {
       static WINDOW *stdlog;
       static Margin margin;
       static void (*display)();
-      static const bool windowed() {
+      static bool windowed() {
         if (!display) return false;
         if (stdlog)
           error("SH", "Unable to print another window");
@@ -107,7 +107,7 @@ namespace ₿ {
           scrollok(stdlog, true);
           idlok(stdlog, true);
         }
-        signal(SIGWINCH, [](const int sig) {
+        signal(SIGWINCH, [](const int) {
           endwin();
           refresh();
           clear();
@@ -124,7 +124,7 @@ namespace ₿ {
           wrefresh(stdlog);
         }
       };
-      static const string stamp() {
+      static string stamp() {
         chrono::system_clock::time_point clock = chrono::system_clock::now();
         chrono::system_clock::duration t = clock.time_since_epoch();
         t -= chrono::duration_cast<chrono::seconds>(t);
@@ -138,9 +138,9 @@ namespace ₿ {
         time_t tt = chrono::system_clock::to_time_t(clock);
         char datetime[15];
         strftime(datetime, 15, "%m/%d %T", localtime(&tt));
-        if (!display) return Ansi::b(COLOR_GREEN) + datetime +
-                             Ansi::r(COLOR_GREEN) + microtime.str()+
-                             Ansi::b(COLOR_WHITE) + ' ';
+        if (!display) return Ansi::b(COLOR_GREEN) + datetime
+                           + Ansi::r(COLOR_GREEN) + microtime.str()
+                           + Ansi::b(COLOR_WHITE) + ' ';
         if (stdlog) {
           wattron(stdlog, COLOR_PAIR(COLOR_GREEN));
           wattron(stdlog, A_BOLD);
@@ -153,7 +153,7 @@ namespace ₿ {
         return "";
       };
       static void log(const string &prefix, const string &reason, const string &highlight = "") {
-        unsigned int color = 0;
+        int color = 0;
         if (reason.find("NG TRADE") != string::npos) {
           if (reason.find("BUY") != string::npos)       color = 1;
           else if (reason.find("SELL") != string::npos) color = -1;
@@ -229,15 +229,12 @@ namespace ₿ {
   class Rollout {
     public:
       Rollout(/* KMxTWEpb9ig */) {
-#ifdef NDEBUG
-        version();
-#else
-        static once_flag test_instance;
-        call_once(test_instance, version);
-#endif
+        static once_flag rollout;
+        call_once(rollout, version);
       };
     protected:
       static void version() {
+        curl_global_init(CURL_GLOBAL_ALL);
         clog << Ansi::b(COLOR_GREEN) << K_SOURCE
              << Ansi::r(COLOR_GREEN) << ' ' << K_BUILD << ' ' << K_STAMP << ".\n";
         const string mods = changelog();
@@ -253,11 +250,11 @@ namespace ₿ {
 #endif
             << ".\n" << Ansi::r(COLOR_YELLOW) << mods << Ansi::reset();
       };
-      static const string changelog() {
+      static string changelog() {
         string mods;
         const json diff =
 #ifdef NDEBUG
-          Curl::xfer("https://api.github.com/repos/ctubio/Krypto-trading-bot"
+          Curl::Web::xfer("https://api.github.com/repos/ctubio/Krypto-trading-bot"
             "/compare/" + string(K_0_GIT) + "...HEAD", 4L)
 #else
           json::object()
@@ -282,7 +279,7 @@ namespace ₿ {
       static vector<function<void()>> endingFn;
     public:
       Ending() {
-        signal(SIGINT, [](const int sig) {
+        signal(SIGINT, [](const int) {
           clog << '\n';
           raise(SIGQUIT);
         });
@@ -290,9 +287,8 @@ namespace ₿ {
         signal(SIGTERM, err);
         signal(SIGABRT, wtf);
         signal(SIGSEGV, wtf);
-#ifndef _WIN32
         signal(SIGUSR1, wtf);
-#endif
+        signal(SIGPIPE, SIG_IGN);
       };
       void ending(const function<void()> &fn) {
         endingFn.push_back(fn);
@@ -310,10 +306,10 @@ namespace ₿ {
              << Ansi::reset() << '\n';
         EXIT(code);
       };
-      static void die(const int sig) {
+      static void die(const int) {
         if (epilogue.empty())
           epilogue = "Excellent decision! "
-                   + Curl::xfer("https://api.icndb.com/jokes/random?escape=javascript&limitTo=[nerdy]", 4L)
+                   + Curl::Web::xfer("https://api.icndb.com/jokes/random?escape=javascript&limitTo=[nerdy]", 4L)
                        .value("/value/joke"_json_pointer, "let's plant a tree instead..");
         halt(
           epilogue.find("Errrror") == string::npos
@@ -321,7 +317,7 @@ namespace ₿ {
             : EXIT_FAILURE
         );
       };
-      static void err(const int sig) {
+      static void err(const int) {
         if (epilogue.empty()) epilogue = "Unknown error, no joke.";
         halt(EXIT_FAILURE);
       };
@@ -330,16 +326,18 @@ namespace ₿ {
         const string mods = changelog();
         if (mods.empty()) {
           epilogue += "(Three-Headed Monkey found):\n"                  + epitaph
-            + "- lastbeat: " + to_string((float)clock()/CLOCKS_PER_SEC) + '\n'
             + "- binbuild: " + string(K_SOURCE)                         + ' '
                              + string(K_BUILD)                          + '\n'
+            + "- lastbeat: " + to_string((float)clock()/CLOCKS_PER_SEC) + '\n'
 #ifndef _WIN32
             + "- tracelog: " + '\n';
           void *k[69];
           size_t jumps = backtrace(k, 69);
           char **trace = backtrace_symbols(k, jumps);
-          for (size_t i = 0; i < jumps; i++)
-            epilogue += string(trace[i]) + '\n';
+          for (;
+            jumps --> 0;
+            epilogue += "  " + to_string(jumps) + ": " + string(trace[jumps]) + '\n'
+          );
           free(trace)
 #endif
           ;
@@ -369,14 +367,14 @@ namespace ₿ {
          << string(epilogue.empty() ? 0 : 1, '\n');
   } };
 
-  struct Argument {
-   const string  name;
-   const string  defined_value;
-   const char   *default_value;
-   const string  help;
-  };
-
   class Option {
+    private_friend:
+      struct Argument {
+       const string  name;
+       const string  defined_value;
+       const char   *default_value;
+       const string  help;
+      };
     protected:
       bool autobot = false;
       pair<vector<Argument>, function<void(
@@ -448,8 +446,7 @@ namespace ₿ {
           {"fix",          "URL",    "",       "set URL of alernative FIX api endpoint for trading"},
           {"dustybot",     "1",      nullptr,  "do not automatically cancel all orders on exit"},
           {"market-limit", "NUMBER", "321",    "set NUMBER of maximum price levels for the orderbook,"
-                                               "\n" "default NUMBER is '321' and the minimum is '15'."
-                                               "\n" "locked bots smells like '--market-limit=3' spirit"}
+                                               "\n" "default NUMBER is '321' and the minimum is '15'"}
         }) long_options.push_back(it);
         for (const Argument &it : arguments.first)
           long_options.push_back(it);
@@ -460,7 +457,7 @@ namespace ₿ {
           {"debug-fix",    "1",      nullptr,  "output FIX errors received from server"},
           {"colors",       "1",      nullptr,  "print highlighted output"},
           {"title",        "WORD",   K_SOURCE, "set WORD to allow admins to identify different bots"},
-          {"free-version", "1",      nullptr,  "work with all market levels but slowdown 7 seconds"}
+          {"free-version", "1",      nullptr,  "slowdown market levels 7 seconds"}
         }) long_options.push_back(it);
         int index = ANY_NUM;
         vector<option> opt_long = { {nullptr, 0, nullptr, 0} };
@@ -490,9 +487,9 @@ namespace ₿ {
           switch (k = getopt_long(argc, argv, "hv", (option*)&opt_long[0], &index)) {
             case -1 :
             case  0 : break;
-            case 'h': help(long_options);
+            case 'h': help(long_options); [[fallthrough]];
             case '?':
-            case 'v': EXIT(EXIT_SUCCESS);
+            case 'v': EXIT(EXIT_SUCCESS);                                       //-V796
             default : {
               const string name(opt_long.at(index).name);
               if      (holds_alternative<int>(args[name]))    args[name] =   stoi(optarg);
@@ -513,11 +510,6 @@ namespace ₿ {
         }
         if (arg<int>("naked"))
           Print::display = nullptr;
-        curl_setopt();
-      };
-    private:
-      void curl_setopt() {
-        curl_global_init(CURL_GLOBAL_ALL);
         if (!arg<string>("interface").empty() and !arg<int>("ipv6"))
           Curl::global_setopt = [&](CURL *curl) {
             curl_easy_setopt(curl, CURLOPT_USERAGENT, "K");
@@ -535,6 +527,7 @@ namespace ₿ {
             curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
           };
       };
+    private:
       void tidy() {
         if (arg<string>("currency").find("/") == string::npos or arg<string>("currency").length() < 3)
           error("CF", "Invalid --currency value; must be in the format of BASE/QUOTE, like BTC/EUR");
@@ -549,7 +542,7 @@ namespace ₿ {
           args["debug-secret"] = 1;
         if (arg<int>("latency"))
           args["nocache"] = 1;
-#if !defined(_WIN32) and defined(NDEBUG)
+#if !defined _WIN32 and defined NDEBUG
         if (arg<int>("latency") or arg<int>("debug-secret"))
 #endif
           args["naked"] = 1;
@@ -571,7 +564,7 @@ namespace ₿ {
           args["B64auth"] = (!arg<int>("headless")
             and arg<string>("user") != "NULL" and !arg<string>("user").empty()
             and arg<string>("pass") != "NULL" and !arg<string>("pass").empty()
-          ) ? "Basic " + Text::B64(arg<string>("user") + ':' + arg<string>("pass"))
+          ) ? Text::B64(arg<string>("user") + ':' + arg<string>("pass"))
             : "";
         }
       };
@@ -618,207 +611,6 @@ namespace ₿ {
       };
   };
 
-  class Socket {
-    public:
-      using HTTPServer = function<const string(string, const string&, const string&)>;
-      using WSServer   = function<const bool(const bool&, const string&)>;
-      using WSMessage  = function<const string(string, const string&)>;
-      string wtfismyip = "localhost";
-    protected:
-      uWS::Hub *socket = nullptr;
-      vector<uWS::Group<uWS::CLIENT>*> gw_clients;
-      vector<uWS::Group<uWS::SERVER>*> ui_servers;
-    public:
-      uWS::Group<uWS::SERVER> *listen(
-                  string &protocol,
-        const     string &inet,
-        const        int &port,
-        const       bool &ssl,
-        const     string &crt,
-        const     string &key,
-        const HTTPServer &httpServer = nullptr,
-        const   WSServer &wsServer   = nullptr,
-        const  WSMessage &wsMessage  = nullptr
-      ) {
-        auto ui_server = socket->createGroup<uWS::SERVER>(uWS::PERMESSAGE_DEFLATE);
-        if (ui_server) {
-          SSL_CTX *ctx = ssl ? sslContext(crt, key) : nullptr;
-          protocol += string(ctx ? 1 : 0, 'S');
-          if (!socket->listen(
-            inet.empty() ? nullptr : inet.data(),
-            port, uS::TLS::Context(ctx), 0, ui_server
-          )) ui_server = nullptr;
-        }
-        if (!ui_server)
-          error("UI", "Unable to listen at port number " + to_string(port)
-            + " (may be already in use by another program)");
-        if (httpServer)
-          ui_server->onHttpRequest([&](uWS::HttpResponse *res, uWS::HttpRequest req, char *data, size_t length, size_t remainingBytes) {
-            if (req.getMethod() != uWS::HttpMethod::METHOD_GET) return;
-            const string response = httpServer(
-              req.getUrl().toString(),
-              req.getHeader("authorization").toString(),
-              cleanAddress(res->getHttpSocket()->getAddress().address)
-            );
-            if (!response.empty())
-              res->write(response.data(), response.length());
-          });
-        if (wsServer) {
-          ui_server->onConnection([&](uWS::WebSocket<uWS::SERVER> *webSocket, uWS::HttpRequest req) {
-            if (!wsServer(true, cleanAddress(webSocket->getAddress().address)))
-              webSocket->close();
-          });
-          ui_server->onDisconnection([&](uWS::WebSocket<uWS::SERVER> *webSocket, int code, char *message, size_t length) {
-            wsServer(false, cleanAddress(webSocket->getAddress().address));
-          });
-        }
-        if (wsMessage)
-          ui_server->onMessage([&](uWS::WebSocket<uWS::SERVER> *webSocket, const char *message, size_t length, uWS::OpCode opCode) {
-            if (length < 2) return;
-            const string response = wsMessage(
-              string(message, length),
-              cleanAddress(webSocket->getAddress().address)
-            );
-            if (!response.empty())
-              webSocket->send(response.data(), response.substr(0, 2) == "PK"
-                                                 ? uWS::OpCode::BINARY
-                                                 : uWS::OpCode::TEXT);
-          });
-        Print::log("UI", "ready at", Text::strL(protocol) + "://" + wtfismyip + ":" + to_string(port));
-        ui_servers.push_back(ui_server);
-        return ui_server;
-      };
-    protected:
-      uWS::Group<uWS::CLIENT> *bind() {
-        if (!socket) socket = new uWS::Hub(0, true);
-        gw_clients.push_back(socket->createGroup<uWS::CLIENT>());
-        return gw_clients.back();
-      };
-    private:
-      SSL_CTX *sslContext(const string &crt, const string &key) {
-        SSL_CTX *ctx = SSL_CTX_new(SSLv23_server_method());
-        if (ctx) {
-          SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv3);
-          if (crt.empty() or key.empty()) {
-            if (!crt.empty())
-              Print::logWar("UI", "Ignored .crt file because .key file is missing");
-            if (!key.empty())
-              Print::logWar("UI", "Ignored .key file because .crt file is missing");
-            Print::logWar("UI", "Connected web clients will enjoy unsecure SSL encryption..\n"
-              "(because the private key is visible in the source!). See --help argument to setup your own SSL");
-            if (!SSL_CTX_use_certificate(ctx,
-              PEM_read_bio_X509(BIO_new_mem_buf((void*)
-                "-----BEGIN CERTIFICATE-----"                                      "\n"
-                "MIICATCCAWoCCQCiyDyPL5ov3zANBgkqhkiG9w0BAQsFADBFMQswCQYDVQQGEwJB" "\n"
-                "VTETMBEGA1UECAwKU29tZS1TdGF0ZTEhMB8GA1UECgwYSW50ZXJuZXQgV2lkZ2l0" "\n"
-                "cyBQdHkgTHRkMB4XDTE2MTIyMjIxMDMyNVoXDTE3MTIyMjIxMDMyNVowRTELMAkG" "\n"
-                "A1UEBhMCQVUxEzARBgNVBAgMClNvbWUtU3RhdGUxITAfBgNVBAoMGEludGVybmV0" "\n"
-                "IFdpZGdpdHMgUHR5IEx0ZDCBnzANBgkqhkiG9w0BAQEFAAOBjQAwgYkCgYEAunyx" "\n"
-                "1lNsHkMmCa24Ns9xgJAwV3A6/Jg/S5jPCETmjPRMXqAp89fShZxN2b/2FVtU7q/N" "\n"
-                "EtNpPyEhfAhPwYrkHCtip/RmZ/b6qY2Cx6otFIsuwO8aUV27CetpoM8TAQSuufcS" "\n"
-                "jcZD9pCAa9GM/yWeqc45su9qBBmLnAKYuYUeDQUCAwEAATANBgkqhkiG9w0BAQsF" "\n"
-                "AAOBgQAeZo4zCfnq5/6gFzoNDKg8DayoMnCtbxM6RkJ8b/MIZT5p6P7OcKNJmi1o" "\n"
-                "XD2evdxNrY0ObQ32dpiLqSS1JWL8bPqloGJBNkSPi3I+eBoJSE7/7HOroLNbp6nS" "\n"
-                "aaec6n+OlGhhjxn0DzYiYsVBUsokKSEJmHzoLHo3ZestTTqUwg=="             "\n"
-                "-----END CERTIFICATE-----"                                        "\n"
-              , -1), nullptr, nullptr, nullptr
-            )) or !SSL_CTX_use_RSAPrivateKey(ctx,
-              PEM_read_bio_RSAPrivateKey(BIO_new_mem_buf((void*)
-                "-----BEGIN RSA PRIVATE KEY-----"                                  "\n"
-                "MIICXAIBAAKBgQC6fLHWU2weQyYJrbg2z3GAkDBXcDr8mD9LmM8IROaM9ExeoCnz" "\n"
-                "19KFnE3Zv/YVW1Tur80S02k/ISF8CE/BiuQcK2Kn9GZn9vqpjYLHqi0Uiy7A7xpR" "\n"
-                "XbsJ62mgzxMBBK659xKNxkP2kIBr0Yz/JZ6pzjmy72oEGYucApi5hR4NBQIDAQAB" "\n"
-                "AoGBAJi9OrbtOreKjeQNebzCqRcAgeeLz3RFiknzjVYbgK1gBhDWo6XJVe8C9yxq" "\n"
-                "sjYJyQV5zcAmkaQYEaHR+OjvRiZ4UmXbItukOD+dnq7xs69n3w54FfANjkurdL2M" "\n"
-                "fPAQm/GJT4TSBDIr7eJQPOrork9uxQStwADTqvklVlKm2YldAkEA80ZYaLrGOBbz" "\n"
-                "5871ewKxtVJNCCmXdYUwq7nI/lqsLBZnB+wiwnQ+3tgfi4YoUoTnv0hIIwkyLYl9" "\n"
-                "Z2wqensf6wJBAMQ96gUGnIcYJzknB5CYDNQalcvvTx7tLtgRXDf47bQJ3X/Q5k/t" "\n"
-                "yDlByUBqvYVShXWs+d4ynNKLze/w18H8Os8CQBYFDAOOxFpXWYRl6zpTKBqtdGOE" "\n"
-                "wDzW7WzdyB+dvW/QJ0tESHEpbHdnQJO0dPnjJcbemAjz0CLnCv7Nf5rOgjkCQE3Q" "\n"
-                "izIw+/JptmvoOQyx7ixQ2mNCYmpN/Iw63gln0MHaQ5WCPUEmdYWWu3mqmbn7Deaq" "\n"
-                "j233Pc4TF7b0FmnaXWsCQAVvyLVU3a9Yactb5MXaN+rEYjUW37GSo+Q1lXfm0OwF" "\n"
-                "EJB7X66Bavwg4MCfpGykS71OxhTEfDu+y1gylPMCGHY="                     "\n"
-                "-----END RSA PRIVATE KEY-----"                                    "\n"
-              , -1), nullptr, nullptr, nullptr)
-            )) ctx = nullptr;
-          } else {
-            if (access(crt.data(), R_OK) == -1)
-              Print::logWar("UI", "Unable to read SSL .crt file at " + crt);
-            if (access(key.data(), R_OK) == -1)
-              Print::logWar("UI", "Unable to read SSL .key file at " + key);
-            if (!SSL_CTX_use_certificate_chain_file(ctx, crt.data())
-              or !SSL_CTX_use_RSAPrivateKey_file(ctx, key.data(), SSL_FILETYPE_PEM)
-            ) {
-              ctx = nullptr;
-              Print::logWar("UI", "Unable to encrypt web clients, will fallback to plain text");
-            }
-          }
-        }
-        return ctx;
-      };
-      static const string cleanAddress(string addr) {
-        if (addr.length() > 7 and addr.substr(0, 7) == "::ffff:") addr = addr.substr(7);
-        if (addr.length() < 7) addr.clear();
-        return addr.empty() ? "unknown" : addr;
-      };
-  };
-
-  class Events {
-    private:
-      uS::Timer *timer = nullptr;
-      uS::Async *loop  = nullptr;
-              unsigned int tick  = 0;
-      mutable unsigned int ticks = 300;
-      vector<function<const bool(const unsigned int&)>> timeFn;
-      mutable vector<function<const bool()>> waitFn;
-      mutable vector<function<void()>> slowFn;
-    public:
-      void timer_ticks_factor(const unsigned int &factor) const {
-        ticks = 300 * (factor ?: 1);
-      };
-      void timer_1s(const function<const bool(const unsigned int&)> &fn) {
-        timeFn.push_back(fn);
-      };
-      void wait_for(const function<const bool()> &fn) const {
-        waitFn.push_back(fn);
-      };
-      void deferred(const function<void()> &fn) const {
-        slowFn.push_back(fn);
-        loop->send();
-      };
-    protected:
-      void start(uS::Loop *const poll) {
-        timer = new uS::Timer(poll);
-        timer->setData(this);
-        timer->start([](uS::Timer *timer) {
-          ((Events*)timer->getData())->timer_1s();
-        }, 0, 1e+3);
-        loop = new uS::Async(poll);
-        loop->setData(this);
-        loop->start([](uS::Async *const loop) {
-          ((Events*)loop->getData())->deferred();
-        });
-      };
-      void stop() {
-        timer->stop();
-        deferred();
-      };
-    private:
-      void deferred() {
-        for (const auto &it : slowFn) it();
-        slowFn.clear();
-        bool waiting = false;
-        for (const auto &it : waitFn) waiting |= it();
-        if (waiting) loop->send();
-      };
-      void timer_1s() {
-        bool waiting = false;
-        for (const auto &it : timeFn) waiting |= it(tick);
-        if (waiting) loop->send();
-        if (++tick >= ticks) tick = 0;
-      };
-  };
-
   class Hotkey {
     public_friend:
       class Catch {
@@ -829,17 +621,13 @@ namespace ₿ {
               hotkey.keymap(it.first, it.second);
           };
       };
-    private_ref:
-      const Events &events;
-    public:
-      Hotkey(const Events &e)
-        : events(e)
-      {};
     private:
+      Loop::Async* event = nullptr;
       future<char> keylogger;
       mutable unordered_map<char, function<void()>> hotFn;
     protected:
-      void legit_keylogger() {
+      void legit_keylogger(Loop::Async *e) {
+        event = e;
         if (hotFn.empty()) return;
         if (keylogger.valid())
           error("SH", string("Unable to launch another \"keylogger\" thread"));
@@ -847,9 +635,14 @@ namespace ₿ {
         halfdelay(5);
         keypad(stdscr, true);
         launch_keylogger();
-        events.wait_for([&]() {
-          return wait_for_keylog();
-        });
+      };
+      void keylog() {
+        if (keylogger.valid()) {
+          const char ch = keylogger.get();
+          if (hotFn.find(ch) != hotFn.end())
+            hotFn.at(ch)();
+          launch_keylogger();
+        }
       };
     private:
       void keymap(const char &ch, function<void()> fn) const {
@@ -857,23 +650,15 @@ namespace ₿ {
           error("SH", string("Too many handlers for \"") + ch + "\" hotkey event");
         hotFn[ch] = fn;
       };
-      const bool wait_for_keylog() {
-        if (keylogger.valid()
-          and keylogger.wait_for(chrono::nanoseconds(0)) == future_status::ready
-        ) {
-          const char ch = keylogger.get();
-          if (hotFn.find(ch) != hotFn.end())
-            hotFn.at(ch)();
-          launch_keylogger();
-        }
-        return false;
-      };
       void launch_keylogger() {
         keylogger = ::async(launch::async, [&]() {
           int ch = ERR;
-          while (ch == ERR and !hotFn.empty())
+          while (ch == ERR and Print::display)
             ch = getch();
-          return ch == ERR ? '\r' : (char)ch;
+          event->wakeup();
+          return ch == ERR
+               ? '\r'
+               : (char)ch;
         });
       };
   };
@@ -892,15 +677,15 @@ namespace ₿ {
                                     MarketDataLongTerm   = 'H'
       };
     public:
-      virtual const mMatter about() const = 0;
-      const bool persist() const {
+      virtual mMatter about() const = 0;
+      bool persist() const {
         return about() == mMatter::QuotingParameters;
       };
   };
 
   class Blob: virtual public About {
     public:
-      virtual const json blob() const = 0;
+      virtual json blob() const = 0;
   };
 
   class Sqlite {
@@ -921,12 +706,12 @@ namespace ₿ {
           void backup() const {
             if (push) push();
           };
-          virtual const Report pull(const json &j) = 0;
-          virtual const string increment() const { return "NULL"; };
-          virtual const double limit()     const { return 0; };
-          virtual const Clock  lifetime()  const { return 0; };
+          virtual Report pull(const json &j) = 0;
+          virtual string increment() const { return "NULL"; };
+          virtual double limit()     const { return 0; };
+          virtual Clock  lifetime()  const { return 0; };
         protected:
-          const Report report(const bool &empty) const {
+          Report report(const bool &empty) const {
             string msg = empty
               ? explainKO()
               : explainOK();
@@ -936,19 +721,19 @@ namespace ₿ {
             return {empty, msg};
           };
         private:
-          virtual const string explain()   const = 0;
-          virtual       string explainOK() const = 0;
-          virtual       string explainKO() const { return ""; };
+          virtual string explain()   const = 0;
+          virtual string explainOK() const = 0;
+          virtual string explainKO() const { return ""; };
       };
       template <typename T> class StructBackup: public Backup {
         public:
           StructBackup(const Sqlite &sqlite)
             : Backup(sqlite)
           {};
-          const json blob() const override {
+          json blob() const override {
             return *(T*)this;
           };
-          const Report pull(const json &j) override {
+          Report pull(const json &j) override {
             from_json(j.empty() ? blob() : j.at(0), *(T*)this);
             return report(j.empty());
           };
@@ -994,16 +779,16 @@ namespace ₿ {
             backup();
             erase();
           };
-          const Report pull(const json &j) override {
+          Report pull(const json &j) override {
             for (const json &it : j)
               rows.push_back(it);
             return report(empty());
           };
-          const json blob() const override {
+          json blob() const override {
             return back();
           };
         private:
-          const string explain() const override {
+          string explain() const override {
             return to_string(size());
           };
       };
@@ -1013,12 +798,6 @@ namespace ₿ {
       sqlite3 *db = nullptr;
       string disk = "main";
       mutable vector<Backup*> tables;
-    private_ref:
-      const Events &events;
-    public:
-      Sqlite(const Events &e)
-        : events(e)
-      {};
     protected:
       void backups(const string &database, const string &diskdata) {
         if (sqlite3_open(database.data(), &db))
@@ -1050,7 +829,7 @@ namespace ₿ {
           Print::logWar("DB", note.second);
         else Print::log("DB", note.second);
       };
-      const json select(Backup *const data) {
+      json select(Backup *const data) {
         const string table = schema(data);
         json result = json::array();
         exec(
@@ -1080,24 +859,22 @@ namespace ₿ {
             : "INSERT INTO " + table
               + " (id,json) VALUES(" + incr + ",'" + blob.dump() + "');"
         );
-        events.deferred([this, sql]() {
-          exec(sql);
-        });
+        exec(sql);
       };
-      const string schema(Backup *const data) const {
+      string schema(Backup *const data) const {
         return (
           data->persist()
             ? disk
             : "main"
         ) + "." + (char)data->about();
       };
-      const string create(const string &table) const {
+      string create(const string &table) const {
         return "CREATE TABLE IF NOT EXISTS " + table + "("
           + "id    INTEGER   PRIMARY KEY AUTOINCREMENT                                           NOT NULL,"
           + "json  BLOB                                                                          NOT NULL,"
           + "time  TIMESTAMP DEFAULT (CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER))  NOT NULL);";
       };
-      const string truncate(const string &table, const Clock &lifetime) const {
+      string truncate(const string &table, const Clock &lifetime) const {
         return lifetime
           ? "DELETE FROM " + table + " WHERE time < " + to_string(Tstamp - lifetime) + ";"
           : "";
@@ -1108,7 +885,7 @@ namespace ₿ {
         if (zErrMsg) Print::logWar("DB", "SQLite error: " + (zErrMsg + (" at " + sql)));
         sqlite3_free(zErrMsg);
       };
-      static int write(void *result, int argc, char **argv, char **azColName) {
+      static int write(void *result, int argc, char **argv, char**) {
         for (int i = 0; i < argc; ++i)
           ((json*)result)->push_back(json::parse(argv[i]));
         return 0;
@@ -1129,10 +906,10 @@ namespace ₿ {
           {
             client.readable.push_back(this);
           };
-          virtual const json hello() {
+          virtual json hello() {
             return { blob() };
           };
-          virtual const bool realtime() const {
+          virtual bool realtime() const {
             return true;
           };
       };
@@ -1141,7 +918,7 @@ namespace ₿ {
           Broadcast(const Client &client)
             : Readable(client)
           {};
-          const bool broadcast() {
+          bool broadcast() {
             if ((read_asap() or read_soon())
               and (read_same_blob() or diff_blob())
             ) {
@@ -1150,23 +927,23 @@ namespace ₿ {
             }
             return false;
           };
-          const json blob() const override {
+          json blob() const override {
             return *(T*)this;
           };
         protected:
           Clock last_Tstamp = 0;
           string last_blob;
-          virtual const bool read_same_blob() const {
+          virtual bool read_same_blob() const {
             return true;
           };
-          const bool diff_blob() {
+          bool diff_blob() {
             const string last = last_blob;
             return (last_blob = blob().dump()) != last;
           };
-          virtual const bool read_asap() const {
+          virtual bool read_asap() const {
             return true;
           };
-          const bool read_soon(const int &delay = 0) {
+          bool read_soon(const int &delay = 0) {
             const Clock now = Tstamp;
             if (last_Tstamp + max(369, delay) > now)
               return false;
@@ -1195,53 +972,52 @@ namespace ₿ {
                   client.clicked(
                     it.first,
                     holds_alternative<const function<void()>>(it.second)
-                      ? [it](const json &j) { get<const function<void()>>(it.second)(); }
+                      ? [it](const json&) { get<const function<void()>>(it.second)(); }
                       : get<const function<void(const json&)>>(it.second)
                   );
               };
           };
       };
     public:
-      string protocol = "HTTP";
+      string protocol;
+      string wtfismyip = "localhost";
     protected:
-      uWS::Group<uWS::SERVER> *webui = nullptr;
       unordered_map<string, pair<const char*, const int>> documents;
     private:
-      int connections = 0;
+      WebServer::Backend server;
+      const Option *option = nullptr;
       mutable unsigned int delay = 0;
       mutable vector<Readable*> readable;
       mutable vector<Clickable*> clickable;
       mutable unordered_map<const Clickable*, vector<function<void(const json&)>>> clickFn;
       const pair<char, char> portal = {'=', '-'};
-      unordered_map<char, function<const json()>> hello;
+      unordered_map<char, function<json()>> hello;
       unordered_map<char, function<void(const json&)>> kisses;
       unordered_map<char, string> queue;
-      const unordered_map<unsigned int, const char*> headers = {
-        {200, "HTTP/1.1 200 OK"
-              "\r\n" "Connection: keep-alive"
-              "\r\n" "Accept-Ranges: bytes"
-              "\r\n" "Vary: Accept-Encoding"
-              "\r\n" "Cache-Control: public, max-age=0"},
-        {401, "HTTP/1.1 401 Unauthorized"
-              "\r\n" "Connection: keep-alive"
-              "\r\n" "Accept-Ranges: bytes"
-              "\r\n" "Vary: Accept-Encoding"
-              "\r\n" "WWW-Authenticate: Basic realm=\"Basic Authorization\""},
-        {403, "HTTP/1.1 403 Forbidden"
-              "\r\n" "Connection: keep-alive"
-              "\r\n" "Accept-Ranges: bytes"
-              "\r\n" "Vary: Accept-Encoding"},
-        {404, "HTTP/1.1 404 Not Found"},
-        {418, "HTTP/1.1 418 I'm a teapot"},
-      };
-    private_ref:
-      const Option &option;
-      const Events &events;
     public:
-      Client(const Option &o, const Events &e)
-        : option(o)
-        , events(e)
-      {};
+      void listen(const Option *const o, const curl_socket_t &loopfd) {
+        option = o;
+        if (!server.listen(
+          loopfd,
+          option->arg<string>("interface"),
+          option->arg<int>("port"),
+          option->arg<int>("ipv6"),
+          {
+            option->arg<string>("B64auth"),
+            response,
+            upgrade,
+            message
+          }
+        )) error("UI", "Unable to listen at port number " + to_string(option->arg<int>("port"))
+             + " (may be already in use by another program)");
+        if (!option->arg<int>("without-ssl"))
+          for (const auto &it : server.ssl_context(
+            option->arg<string>("ssl-crt"),
+            option->arg<string>("ssl-key")
+          )) Print::logWar("UI", it);
+        protocol  = server.protocol();
+        Print::log("UI", "ready at", Text::strL(protocol) + "://" + wtfismyip + ":" + to_string(option->arg<int>("port")));
+      };
       void clicked(const Clickable *data, const json &j = nullptr) const {
         if (clickFn.find(data) != clickFn.end())
           for (const auto &it : clickFn.at(data)) it(j);
@@ -1250,26 +1026,26 @@ namespace ₿ {
         delay = d;
       };
       void broadcast(const unsigned int &tick) {
-        if (delay and !(tick % delay)) broadcast();
+        if (delay and !(tick % delay))
+          broadcast();
+        server.timeouts();
       };
       void welcome() {
         for (auto &it : readable) {
           it->read = [&]() {
-            if (connections) {
-              queue[(char)it->about()] = it->blob().dump();
-              if (it->realtime() or !delay) broadcast();
-            }
+            if (server.idle()) return;
+            queue[(char)it->about()] = it->blob().dump();
+            if (it->realtime() or !delay) broadcast();
           };
           hello[(char)it->about()] = [&]() {
             return it->hello();
           };
         }
         readable.clear();
-        for (auto &it : clickable) {
+        for (auto &it : clickable)
           kisses[(char)it->about()] = [&](const json &butterfly) {
             it->click(butterfly);
           };
-        }
         clickable.clear();
       };
       void headless() {
@@ -1279,53 +1055,44 @@ namespace ₿ {
         clickable.clear();
         documents.clear();
       };
-      Socket::WSServer wsServer = [&](const bool &connection, const string &addr) {
-        connections += connection ?: -1;
-        Print::log("UI", to_string(connections) + " client" + string(connections == 1 ? 0 : 1, 's')
-          + " connected, last connection was from", addr);
-        if (connections > option.arg<int>("client-limit")) {
-          Print::log("UI", "--client-limit=" + to_string(option.arg<int>("client-limit")) + " reached by", addr);
-          return false;
-        }
-        return true;
+      void withoutGoodbye() {
+        server.purge();
       };
-      Socket::WSMessage wsMessage = [&](string message, const string &addr) {
-        if (alien(addr))
-          return string(documents.at("").first, documents.at("").second);
-        const char matter = message.at(1);
-        if (portal.first == message.at(0)) {
-          if (hello.find(matter) != hello.end()) {
-            const json reply = hello.at(matter)();
-            if (!reply.is_null())
-              return portal.first + (matter + reply.dump());
-          }
-        } else if (portal.second == message.at(0) and kisses.find(matter) != kisses.end()) {
-          message = message.substr(2);
-          json butterfly = json::accept(message)
-            ? json::parse(message)
-            : json::object();
-          for (auto it = butterfly.begin(); it != butterfly.end();)
-            if (it.value().is_null()) it = butterfly.erase(it); else ++it;
-          kisses.at(matter)(butterfly);
-        }
-        return string();
+    private:
+      void clicked(const Clickable *data, const function<void(const json&)> &fn) const {
+        clickFn[data].push_back(fn);
       };
-      Socket::HTTPServer httpServer = [&](string path, const string &auth, const string &addr) {
+      void broadcast() {
+        if (queue.empty()) return;
+        if (!server.idle())
+          server.broadcast(portal.second, queue);
+        queue.clear();
+      };
+      bool alien(const string &addr) {
+        if (addr != "unknown"
+          and !option->arg<string>("whitelist").empty()
+          and option->arg<string>("whitelist").find(addr) == string::npos
+        ) {
+          Print::log("UI", "dropping gzip bomb on", addr);
+          return true;
+        }
+        return false;
+      };
+      WebServer::Response response = [&](string path, const string &auth, const string &addr) {
         if (alien(addr))
           path.clear();
-        const bool papersplease = !(
-          path.empty() or option.arg<string>("B64auth").empty()
-        );
+        const bool papersplease = !(path.empty() or option->arg<string>("B64auth").empty());
         string content,
                type = "text/html; charset=UTF-8";
         unsigned int code = 200;
+        const string leaf = path.substr(path.find_last_of('.') + 1);
         if (papersplease and auth.empty()) {
           Print::log("UI", "authorization attempt from", addr);
           code = 401;
-        } else if (papersplease and auth != option.arg<string>("B64auth")) {
+        } else if (papersplease and auth != option->arg<string>("B64auth")) {
           Print::log("UI", "authorization failed from", addr);
           code = 403;
-        } else if (connections < option.arg<int>("client-limit")) {
+        } else if (leaf != "/" or server.clients() < option->arg<int>("client-limit")) {
           if (documents.find(path) == documents.end())
             path = path.substr(path.find_last_of("/", path.find_last_of("/") - 1));
           if (documents.find(path) == documents.end())
@@ -1333,7 +1100,6 @@ namespace ₿ {
           if (documents.find(path) != documents.end()) {
             content = string(documents.at(path).first,
                              documents.at(path).second);
-            const string leaf = path.substr(path.find_last_of('.') + 1);
             if (leaf == "/") Print::log("UI", "authorization success from", addr);
             else if (leaf == "js")  type = "application/javascript; charset=UTF-8";
             else if (leaf == "css") type = "text/css; charset=UTF-8";
@@ -1346,51 +1112,44 @@ namespace ₿ {
               code = 418, content = "Today, is your lucky day!";
           }
         } else {
-          Print::log("UI", "--client-limit=" + to_string(option.arg<int>("client-limit")) + " reached by", addr);
+          Print::log("UI", "--client-limit=" + to_string(option->arg<int>("client-limit"))
+            + " reached by", addr);
           content = "Thank you! but our princess is already in this castle!"
                     "<br/>" "Refresh the page anytime to retry.";
         }
-        return document(content, code, type);
+        return server.document(content, code, type);
       };
-    private:
-      void clicked(const Clickable *data, const function<void(const json&)> &fn) const {
-        clickFn[data].push_back(fn);
-      };
-      void broadcast() {
-        if (queue.empty()) return;
-        vector<string> msgs;
-        for (const auto &it : queue)
-          msgs.push_back(portal.second + (it.first + it.second));
-        queue.clear();
-        events.deferred([this, msgs]() {
-          for (const auto &it : msgs)
-            webui->broadcast(it.data(), it.length(), uWS::OpCode::TEXT);
-        });
-      };
-      const bool alien(const string &addr) {
-        if (addr != "unknown"
-          and !option.arg<string>("whitelist").empty()
-          and option.arg<string>("whitelist").find(addr) == string::npos
-        ) {
-          Print::log("UI", "dropping gzip bomb on", addr);
-          return true;
+      WebServer::Upgrade upgrade = [&](const int &sum, const string &addr) {
+        const int tentative = server.clients() + sum;
+        Print::log("UI", to_string(tentative) + " client" + string(tentative == 1 ? 0 : 1, 's')
+          + (sum > 0 ? "" : " remain") + " connected, last connection was from", addr);
+        if (tentative > option->arg<int>("client-limit")) {
+          Print::log("UI", "--client-limit=" + to_string(option->arg<int>("client-limit"))
+            + " reached by", addr);
+          return 0;
         }
-        return false;
+        return sum;
       };
-      const string document(
-        const       string &content,
-        const unsigned int &code,
-        const       string &type
-      ) const {
-        return headers.at(code)
-         + string((content.length() > 2 and (content.substr(0, 2) == "PK" or (
-             content.at(0) == '\x1F' and content.at(1) == '\x8B'
-           ))) ? "\r\n" "Content-Encoding: gzip" : "")
-         + "\r\n" "Content-Type: "   + type
-         + "\r\n" "Content-Length: " + to_string(content.length())
-         + "\r\n"
-           "\r\n"
-         + content;
+      WebServer::Message message = [&](string msg, const string &addr) {
+        if (alien(addr))
+          return string(documents.at("").first, documents.at("").second);
+        const char matter = msg.at(1);
+        if (portal.first == msg.at(0)) {
+          if (hello.find(matter) != hello.end()) {
+            const json reply = hello.at(matter)();
+            if (!reply.is_null())
+              return portal.first + (matter + reply.dump());
+          }
+        } else if (portal.second == msg.at(0) and kisses.find(matter) != kisses.end()) {
+          msg = msg.substr(2);
+          json butterfly = json::accept(msg)
+            ? json::parse(msg)
+            : json::object();
+          for (auto it = butterfly.begin(); it != butterfly.end();)
+            if (it.value().is_null()) it = butterfly.erase(it); else ++it;
+          kisses.at(matter)(butterfly);
+        }
+        return string();
       };
   };
 
@@ -1411,30 +1170,27 @@ namespace ₿ {
 
   class KryptoNinja: public Klass,
                      public Print,
+                     public Epoll,
                      public Ending,
                      public Option,
-                     public Socket,
-                     public Events,
                      public Hotkey,
                      public Sqlite,
                      public Client {
     public:
       Gw *gateway = nullptr;
     public:
-      KryptoNinja()
-        : Hotkey((Events&)*this)
-        , Sqlite((Events&)*this)
-        , Client((Option&)*this, (Events&)*this)
-      {};
-      KryptoNinja *const main(int argc, char** argv) {
+      KryptoNinja *main(int argc, char** argv) {
         {
           Option::main(argc, argv, databases, documents.empty());
           setup();
         } {
-          if (windowed()) legit_keylogger();
+          if (windowed())
+            legit_keylogger(async([&]() {
+              keylog();
+            }));
         } {
           log("CF", "Outbound IP address is",
-            wtfismyip = Curl::xfer("https://wtfismyip.com/json", 4L)
+            wtfismyip = Curl::Web::xfer("https://wtfismyip.com/json", 4L)
                           .value("YourFuckingIPAddress", wtfismyip)
           );
         } {
@@ -1448,19 +1204,13 @@ namespace ₿ {
               + " (consider to repeat a few times this check)");
           }
         } {
-          gateway->api = bind();
-          start(socket->getLoop());
+          gateway->waitForData((Loop*)this);
+          timer_1s([&](const unsigned int &tick) {
+            gateway->askForData(tick);
+          });
           ending([&]() {
             gateway->end(arg<int>("dustybot"));
-            stop();
-          });
-          wait_for([&]() {
-            return gateway->waitForData();
-          });
-          timer_1s([&](const unsigned int &tick) {
-            if (gateway->countdown and !--gateway->countdown)
-              socket->connect(gateway->ws, nullptr, {}, 5e+3, gateway->api);
-            return gateway->countdown ? false : gateway->askForData(tick);
+            end();
           });
           handshake({
             {"gateway", gateway->http      },
@@ -1480,38 +1230,39 @@ namespace ₿ {
         } {
           if (arg<int>("headless")) headless();
           else {
-            webui = listen(
-              protocol, arg<string>("interface"), arg<int>("port"),
-              !arg<int>("without-ssl"), arg<string>("ssl-crt"), arg<string>("ssl-key"),
-              httpServer, wsServer, wsMessage
-            );
+            listen((Option*)this, poll());
             timer_1s([&](const unsigned int &tick) {
               broadcast(tick);
-              return false;
             });
             ending([&]() {
-              webui->close();
+              withoutGoodbye();
             });
             welcome();
           }
+        } {
+          ending([&]() {
+            curl_global_cleanup();
+            if (!arg<int>("free-version"))
+              gateway->disclaimer();
+          });
         }
         return this;
       };
       void wait(Klass *const k = nullptr) {
         if (k) k->wait();
         else Klass::wait();
-        if (gateway->ready(socket->getLoop()))
-          socket->run();
+        if (gateway->ready())
+          walk();
       };
       void handshake(const GwExchange::Report &notes = {}) {
         const json reply = gateway->handshake(arg<int>("nocache"));
-        if (!gateway->minTick or !gateway->minSize)
+        if (!gateway->tickPrice or !gateway->tickSize or !gateway->minSize)
           error("GW", "Unable to fetch data from " + gateway->exchange
             + " for symbols " + gateway->base + "/" + gateway->quote
             + ", possible error message: " + reply.dump());
         gateway->report(notes, arg<int>("nocache"));
       };
-      const unsigned int memSize() const {
+      unsigned int memSize() const {
 #ifdef _WIN32
         return 0;
 #else
@@ -1519,7 +1270,7 @@ namespace ₿ {
         return getrusage(RUSAGE_SELF, &ru) ? 0 : ru.ru_maxrss * 1e+3;
 #endif
       };
-      const unsigned int dbSize() const {
+      unsigned int dbSize() const {
         if (!databases or arg<string>("database") == ":memory:") return 0;
         struct stat st;
         return stat(arg<string>("database").data(), &st) ? 0 : st.st_size;
@@ -1551,7 +1302,7 @@ namespace ₿ {
         gateway->pass      = arg<string>("passphrase");
         gateway->maxLevel  = arg<int>("market-limit");
         gateway->debug     = arg<int>("debug-secret");
-        gateway->version   = arg<int>("free-version");
+        gateway->loopfd    = poll();
         gateway->printer   = [&](const string &prefix, const string &reason, const string &highlight) {
           if (reason.find("Error") != string::npos)
             Print::logWar(prefix, reason);

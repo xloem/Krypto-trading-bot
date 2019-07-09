@@ -183,7 +183,7 @@ class DisplayOrder {
                                         </ng-container>
                                         <td style="width:169px;border-bottom: 3px solid #D64A4A;" *ngIf="!pair.quotingParameters.display.percentageValues">
                                             <input class="form-control input-sm" title="{{ baseCurrency }}"
-                                               type="number" step="0.01" min="0.01"
+                                               type="number" step="{{ product.advert.tickSize}}" min="{{ product.advert.minSize}}"
                                                onClick="this.select()"
                                                [(ngModel)]="pair.quotingParameters.display.buySize">
                                         </td>
@@ -199,7 +199,7 @@ class DisplayOrder {
                                         </td>
                                         <td style="width:169px;border-bottom: 3px solid #D64A4A;" *ngIf="!pair.quotingParameters.display.percentageValues">
                                             <input class="form-control input-sm" title="{{ baseCurrency }}"
-                                               type="number" step="0.01" min="0.01"
+                                               type="number" step="{{ product.advert.tickSize}}" min="{{ product.advert.minSize}}"
                                                onClick="this.select()"
                                                [(ngModel)]="pair.quotingParameters.display.sellSize">
                                         </td>
@@ -230,6 +230,8 @@ class DisplayOrder {
                                         <th title="Sets the periods of EWMA Short to automatically manage positions." *ngIf="pair.quotingParameters.display.autoPositionMode">short</th>
                                         <th title="Threshold removed from each period, affects EWMA Long, Medium and Short. The decimal value must be betweem 0 and 1." *ngIf="pair.quotingParameters.display.autoPositionMode">sensibility</th>
                                         <th title="Sets a static Target Base Position for Krypto-trading-bot to stay near. Krypto-trading-bot will still try to respect pDiv and not make your position fluctuate by more than that value." *ngIf="!pair.quotingParameters.display.autoPositionMode">tbp<span *ngIf="pair.quotingParameters.display.percentageValues">%</span></th>
+                                        <th title="Sets a static minimum Target Base Position for Krypto-trading-bot. Krypto-trading-bot will still try to respect pDiv and not make your position reduce below that value." *ngIf="pair.quotingParameters.display.autoPositionMode>0">tbpmin<span *ngIf="pair.quotingParameters.display.percentageValues">%</span></th>
+                                        <th title="Sets a static maximum Target Base Position for Krypto-trading-bot. Krypto-trading-bot will still try to respect pDiv and not make your position increase beyond that value." *ngIf="pair.quotingParameters.display.autoPositionMode>0">tbpmax<span *ngIf="pair.quotingParameters.display.percentageValues">%</span></th>
                                         <th title="Sets the strategy of dynamically adjusting the pDiv depending on the divergence from 50% of Base Value." *ngIf="pair.quotingParameters.display.autoPositionMode">pDivMode</th>
                                         <th title="If your Target Base Position diverges more from this value, Krypto-trading-bot will stop sending orders to stop too much directional trading.">pDiv<span *ngIf="pair.quotingParameters.display.percentageValues">%</span></th>
                                         <th title="It defines the minimal pDiv for the dynamic positon divergence." *ngIf="pair.quotingParameters.display.autoPositionMode && pair.quotingParameters.display.positionDivergenceMode">pDivMin<span *ngIf="pair.quotingParameters.display.percentageValues">%</span></th>
@@ -293,6 +295,30 @@ class DisplayOrder {
                                                onClick="this.select()"
                                                [(ngModel)]="pair.quotingParameters.display.targetBasePositionPercentage">
                                         </td>
+                                        <td style="width:88px;border-bottom: 3px solid #8BE296;" *ngIf="!pair.quotingParameters.display.percentageValues && pair.quotingParameters.display.autoPositionMode">
+                                            <input class="form-control input-sm" title="{{ baseCurrency }}"
+                                               type="number" step="0.01" min="0"
+                                               onClick="this.select()"
+                                               [(ngModel)]="pair.quotingParameters.display.targetBasePositionMin">
+                                        </td>
+                                        <td style="width:88px;border-bottom: 3px solid #8BE296;" *ngIf="pair.quotingParameters.display.percentageValues && pair.quotingParameters.display.autoPositionMode">
+                                            <input class="form-control input-sm" title="{{ baseCurrency }}"
+                                               type="number" step="0.1" min="0" max="100"
+                                               onClick="this.select()"
+                                               [(ngModel)]="pair.quotingParameters.display.targetBasePositionPercentageMin">
+                                        </td>
+                                        <td style="width:88px;border-bottom: 3px solid #8BE296;" *ngIf="!pair.quotingParameters.display.percentageValues && pair.quotingParameters.display.autoPositionMode">
+                                            <input class="form-control input-sm" title="{{ baseCurrency }}"
+                                               type="number" step="0.01" min="0"
+                                               onClick="this.select()"
+                                               [(ngModel)]="pair.quotingParameters.display.targetBasePositionMax">
+                                        </td>
+                                        <td style="width:88px;border-bottom: 3px solid #8BE296;" *ngIf="pair.quotingParameters.display.percentageValues && pair.quotingParameters.display.autoPositionMode">
+                                            <input class="form-control input-sm" title="{{ baseCurrency }}"
+                                               type="number" step="0.1" min="0" max="100"
+                                               onClick="this.select()"
+                                               [(ngModel)]="pair.quotingParameters.display.targetBasePositionPercentageMax">
+                                        </td>
                                         <td style="min-width:121px;border-bottom: 3px solid #DDE28B;" *ngIf="pair.quotingParameters.display.autoPositionMode">
                                             <select class="form-control input-sm"
                                                 [(ngModel)]="pair.quotingParameters.display.positionDivergenceMode">
@@ -343,7 +369,7 @@ class DisplayOrder {
                                             <input type="number"
                                                [(ngModel)]="pair.quotingParameters.display.bestWidthSize"
                                                class="form-control input-sm" title="{{ baseCurrency }}"
-                                               type="number" step="{{ product.advert.minTick}}" min="0"
+                                               type="number" step="{{ product.advert.tickPrice}}" min="0"
                                                onClick="this.select()">
                                         </td>
                                         <td style="width:25px;border-bottom: 3px solid #8BE296;" *ngIf="[6].indexOf(pair.quotingParameters.display.mode)==-1">
@@ -352,7 +378,7 @@ class DisplayOrder {
                                         </td>
                                         <td style="width:169px;border-bottom: 3px solid #8BE296;" *ngIf="!pair.quotingParameters.display.widthPercentage || [6].indexOf(pair.quotingParameters.display.mode)>-1">
                                             <input class="width-option form-control input-sm" title="{{ quoteCurrency }}"
-                                               type="number" step="{{ product.advert.minTick}}" min="{{ product.advert.minTick}}"
+                                               type="number" step="{{ product.advert.tickPrice}}" min="{{ product.advert.tickPrice}}"
                                                onClick="this.select()"
                                                [(ngModel)]="pair.quotingParameters.display.widthPing">
                                         </td>
@@ -364,7 +390,7 @@ class DisplayOrder {
                                         </td>
                                         <td style="width:169px;border-bottom: 3px solid #8BE296;" *ngIf="pair.quotingParameters.display.safety && !pair.quotingParameters.display.widthPercentage">
                                             <input class="width-option form-control input-sm" title="{{ quoteCurrency }}"
-                                               type="number" step="{{ product.advert.minTick}}" min="{{ product.advert.minTick}}"
+                                               type="number" step="{{ product.advert.tickPrice}}" min="{{ product.advert.tickPrice}}"
                                                onClick="this.select()"
                                                [(ngModel)]="pair.quotingParameters.display.widthPong">
                                         </td>
@@ -552,7 +578,7 @@ class DisplayOrder {
                             </button>
                             <wallet-position [baseCurrency]="baseCurrency" [quoteCurrency]="quoteCurrency" [product]="product" [setPosition]="Position"></wallet-position>
                             <div>
-                              <a [hidden]="!exchange_market" href="{{ exchange_market }}" target="_blank">Market</a>, <a [hidden]="!exchange_orders" href="{{ exchange_orders }}" target="_blank">Orders</a>
+                              <a [hidden]="!exchange_market" href="{{ exchange_market }}" target="_blank">Market</a><span [hidden]="!(exchange_market && exchange_orders)">, </span><a [hidden]="!exchange_orders" href="{{ exchange_orders }}" target="_blank">Orders</a>
                               <br/><br/><div>
                                   <button type="button"
                                           class="btn btn-xs btn-primary navbar-btn"
@@ -634,7 +660,7 @@ class DisplayOrder {
                           </tr>
                           <tr>
                               <td><label (click)="insertBidAskPrice()" style="text-decoration:underline;cursor:pointer;padding-right:5px">Price:</label></td>
-                              <td style="padding-bottom:5px;"><input id="orderPriceInput" class="form-control input-sm" type="number" step="{{ product.advert.minTick}}" [(ngModel)]="order.price" /></td>
+                              <td style="padding-bottom:5px;"><input id="orderPriceInput" class="form-control input-sm" type="number" step="{{ product.advert.tickPrice}}" [(ngModel)]="order.price" /></td>
                           </tr>
                           <tr>
                               <td><label (click)="insertBidAskSize()" style="text-decoration:underline;cursor:pointer">Size:</label></td>
@@ -780,7 +806,7 @@ class ClientComponent implements OnInit {
     window.parent.postMessage('height='+document.getElementsByTagName('body')[0].getBoundingClientRect().height+'px', '*');
   };
   public product: Models.ProductState = {
-    advert: new Models.ProductAdvertisement(null, null, null, null, null, null, .01),
+    advert: new Models.ProductAdvertisement(null, null, null, null, null, null, .01, .01, .01),
     fixedPrice: 8,
     fixedSize: 8
   };
@@ -804,6 +830,8 @@ class ClientComponent implements OnInit {
   ) {}
 
   ngOnInit() {
+    new Subscribe.KSocket();
+
     this.buildDialogs(window, document);
 
     this.pair = new Pair.DisplayPair(this.zone, this.subscriberFactory, this.fireFactory);
@@ -952,13 +980,17 @@ class ClientComponent implements OnInit {
   }
 
   public changeTheme = () => {
-    this.user_theme = this.user_theme!==null?(this.user_theme==''?'-dark':''):(this.system_theme==''?'-dark':'');
+    this.user_theme = this.user_theme!==null
+                  ? (this.user_theme  ==''?'-dark':'')
+                  : (this.system_theme==''?'-dark':'');
     this.system_theme = this.user_theme;
     this.setTheme();
   }
 
   private getTheme = (hour: number) => {
-    return this.user_theme!==null?this.user_theme:((hour<9 || hour>=21)?'-dark':'');
+    return this.user_theme!==null
+         ? this.user_theme
+         : ((hour<9 || hour>=21)?'-dark':'');
   }
 
   private buildDialogs = (a : any, b : any) => {
@@ -1036,13 +1068,16 @@ class ClientComponent implements OnInit {
           ? 'https://www.ethfinex.com/trading/'+this.baseCurrency+this.quoteCurrency
           : (this.exchange_name=='HITBTC'
             ? 'https://hitbtc.com/exchange/'+this.baseCurrency+'-to-'+this.quoteCurrency
-            : (this.exchange_name=='KRAKEN'
-              ? 'https://www.kraken.com/charts'
-              : (this.exchange_name=='POLONIEX'
-                ? 'https://poloniex.com/exchange'
-                : (this.exchange_name=='FCOIN'
-                  ? 'https://exchange.fcoin.com/ex/main/'+this.baseCurrency + '-' + this.quoteCurrency
-                  : null
+            : (this.exchange_name=='BEQUANT'
+              ? 'https://bequant.com/exchange/'+this.baseCurrency+'-to-'+this.quoteCurrency
+              : (this.exchange_name=='KRAKEN'
+                ? 'https://www.kraken.com/charts'
+                : (this.exchange_name=='POLONIEX'
+                  ? 'https://poloniex.com/exchange'
+                  : (this.exchange_name=='FCOIN'
+                    ? 'https://exchange.fcoin.com/ex/main/'+this.baseCurrency + '-' + this.quoteCurrency
+                    : null
+                  )
                 )
               )
             )
@@ -1057,13 +1092,16 @@ class ClientComponent implements OnInit {
           ? 'https://www.ethfinex.com/reports/orders'
           : (this.exchange_name=='HITBTC'
             ? 'https://hitbtc.com/reports/orders'
-            : (this.exchange_name=='KRAKEN'
-              ? 'https://www.kraken.com/u/trade'
-              : (this.exchange_name=='POLONIEX'
-                ? 'https://poloniex.com/tradeHistory'
-                : (this.exchange_name=='FCOIN'
+            : (this.exchange_name=='BEQUANT'
+              ? 'https://bequant.com/reports/orders'
+              : (this.exchange_name=='KRAKEN'
+                ? 'https://www.kraken.com/u/trade'
+                : (this.exchange_name=='POLONIEX'
+                  ? 'https://poloniex.com/tradeHistory'
+                  : (this.exchange_name=='FCOIN'
                     ? 'https://exchange.fcoin.com/orders'
                     : null
+                  )
                 )
               )
             )
@@ -1071,8 +1109,8 @@ class ClientComponent implements OnInit {
         )
       );
     this.product.advert = pa;
-    this.product.fixedPrice = Math.max(0, Math.floor(Math.log10(pa.minTick)) * -1);
-    this.product.fixedSize  = pa.minTick < 1e-8 ? 10 : 8;
+    this.product.fixedPrice = Math.abs(Math.log10(pa.tickPrice));
+    this.product.fixedSize  = Math.abs(Math.log10(pa.tickSize));
     setTimeout(this.resizeMatryoshka, 5000);
     console.log("%cK started "+(new Date().toISOString().slice(11, -1))+"  %c"+this.homepage, "color:green;font-size:32px;", "color:red;font-size:16px;");
   }
