@@ -5,12 +5,14 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <iomanip>
 #include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
 #include <unordered_map>
 #include <map>
+#include <list>
 #include <ctime>
 #include <cmath>
 #include <mutex>
@@ -23,25 +25,39 @@
 #include <variant>
 #include <algorithm>
 #include <functional>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <getopt.h>
+#include <unistd.h>
 
-#ifdef _WIN32
-#define strsignal to_string
-#else
+#ifndef _WIN32
 #include <execinfo.h>
+#include <sys/socket.h>
 #include <sys/resource.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <netdb.h>
 #endif
 
-using namespace std;
+#if defined _WIN32 or defined __APPLE__
+#define Epoll    Libuv
+#define EPOLLIN  UV_READABLE
+#define EPOLLOUT UV_WRITABLE
+#include <uv.h>
+#else
+#include <sys/epoll.h>
+#include <sys/timerfd.h>
+#include <sys/eventfd.h>
+#endif
 
 #include <json.h>
 
 #include <sqlite3.h>
 
-#include <uWS/uWS.h>
-
 #include <curl/curl.h>
 
+#include <openssl/ssl.h>
 #include <openssl/bio.h>
 #include <openssl/evp.h>
 #include <openssl/sha.h>
@@ -50,43 +66,60 @@ using namespace std;
 
 #include <ncurses/ncurses.h>
 
-#include <quickfix/NullStore.h>
-#include <quickfix/Application.h>
-#include <quickfix/SessionSettings.h>
-#include <quickfix/SSLSocketInitiator.h>
-#include <quickfix/fix42/NewOrderSingle.h>
-#include <quickfix/fix42/OrderCancelRequest.h>
-
-#ifndef M_PI_2
-#define M_PI_2 1.5707963267948965579989817342720925807952880859375
-#endif
+using namespace std;
 
 using Price  = double;
 
 using Amount = double;
 
-using RandId = string;
-
-using CoinId = string;
-
 using Clock  = long long int;
 
 //! \def
-//! \brief Number of ticks in milliseconds since Thu Jan  1 00:00:00 1970.
+//! \brief Number of ticks in milliseconds, since Thu Jan  1 00:00:00 1970.
 #define Tstamp chrono::duration_cast<chrono::milliseconds>(     \
                  chrono::system_clock::now().time_since_epoch() \
                ).count()
+
+//! \def
+//! \brief Archimedes of Syracuse was here, since two millenniums ago.
+#ifndef M_PI_2
+#define M_PI_2 1.5707963267948965579989817342720925807952880859375
+#endif
+
+//! \def
+//! \brief Do like if we care about winy.
+#ifndef SIGUSR1
+#define SIGUSR1     SIGABRT
+#define strsignal   to_string
+#define SOCK_OPTVAL char
+#else
+#define SOCK_OPTVAL int
+#endif
+
+//! \def
+//! \brief Do like if we care about macos or winy.
+#ifndef TCP_CORK
+#define TCP_CORK            TCP_NOPUSH
+#define MSG_NOSIGNAL        0
+#define SOCK_CLOEXEC        0
+#define SOCK_NONBLOCK       0
+#define accept4(a, b, c, d) accept(a, b, c)
+#endif
 
 //! \def
 //! \brief Redundant placeholder to enforce private references.
 #define private_ref private
 
 //! \def
-//! \brief Redundant placeholder to enforce public nested classes.
+//! \brief Redundant placeholder to enforce private nested declarations.
+#define private_friend private
+
+//! \def
+//! \brief Redundant placeholder to enforce public nested declarations.
 #define public_friend public
 
 //! \def
-//! \brief A number used as impossible or unset value, when 0 is not appropiate.
+//! \brief Any number used as impossible or unset value, when 0 is not appropiate.
 //! \since Having seen Bourbon brutality after the fall of Valencia,
 //!        Barcelona decided to resist. The 14-month Siege of Barcelona
 //!        began on July 7th 1713 and 25,000 Franco-Castilian troops
@@ -100,6 +133,7 @@ using Clock  = long long int;
 //!        institutions, established a new territory for the whole Spain,
 //!        suppressed Catalan universities, banned the Catalan language,
 //!        and repressed with violence any kind of dissidence.
+//! \note  "any" means "year" in Catalan.
 //! \link  wikipedia.org/wiki/National_Day_of_Catalonia
 #define ANY_NUM 1714
 
