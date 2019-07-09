@@ -1564,8 +1564,6 @@ namespace ₿ {
       };
     private:
       void calcSizes() {
-        // - [ ] provide an exponent to TBPSide, so that the user can control how fast it drops off
-        // - [X] cause TBPSide to drop to 0 at the PDIV, not at the extrema.
         if (qp.percentageValues) { 
           sellSize = qp.sellSizePercentage / 1e+2;
           buySize = qp.buySizePercentage / 1e+2;
@@ -1580,7 +1578,7 @@ namespace ₿ {
             break;
           case mOrderPctTotal::TBPSide:
             sellSize *= pow((wallets.base.total - pdivMin) / (wallets.base.value - pdivMin), qp.tradeSizeTBPExp);
-            buySize *= (pdivMax - wallets.base.total) / pdivMax;
+            buySize *= pow((pdivMax - wallets.base.total) / pdivMax, qp.tradeSizeTBPExp);
           case mOrderPctTotal::Value: default:
           case mOrderPctTotal::TBPValue:
             sellSize *= wallets.base.value;
