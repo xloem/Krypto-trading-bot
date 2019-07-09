@@ -3,6 +3,8 @@
 //! \file
 //! \brief Minimal user application framework.
 
+#include <cstdlib>
+
 namespace ₿ {
   string epilogue, epitaph;
 

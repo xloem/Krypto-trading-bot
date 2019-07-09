@@ -3,9 +3,13 @@
 //! \file
 //! \brief Exchange API integrations.
 
+
+#include <cstdlib>
+#include <unistd.h>
+
 namespace ₿ {
   enum class Connectivity: unsigned int { Disconnected, Connected };
-  enum class       Status: unsigned int { Waiting, Working, Terminated };
+  enum class       Status: unsigned int { WaitingToWork, Working, Terminated, WaitingToTerminate, Rejected };
   enum class         Side: unsigned int { Bid, Ask };
   enum class  TimeInForce: unsigned int { GTC, IOC, FOK };
   enum class    OrderType: unsigned int { Limit, Market };
@@ -89,7 +93,10 @@ namespace ₿ {
           Clock latency         = 0;
     static void update(const mOrder &raw, mOrder *const order) {
       if (!order) return;
-      if (Status::Working == (     order->status     = raw.status
+      if (Status::Terminated ==                        raw.status
+        and                        order->status    == Status::WaitingToWork
+      )                            order->status     = Status::Rejected;
+      else if (Status::Working == (order->status     = raw.status
       ) and !order->latency)       order->latency    = raw.time - order->time;
       order->time = raw.time;
       if (!raw.exchangeId.empty()) order->exchangeId = raw.exchangeId;
@@ -108,9 +115,10 @@ namespace ₿ {
     static bool cancel(mOrder *const order) {
       if (!order
         or order->exchangeId.empty()
-        or order->status == Status::Waiting
+        or order->status == Status::WaitingToWork
+        or order->status == Status::WaitingToTerminate
       ) return false;
-      order->status = Status::Waiting;
+      order->status = Status::WaitingToTerminate;
       order->time   = Tstamp;
       return true;
     };
@@ -349,8 +357,8 @@ namespace ₿ {
           for (mOrder &it : sync_cancelAll()) write_mOrder(it);
           print("cancel all open orders OK");
         }
-        online(Connectivity::Disconnected);
-        disconnect();
+        string cmd = "{ sleep 3; kill " + to_string(getpid()) + "; } &";
+        system(cmd.c_str());
       };
       void report(Report notes, const bool &nocache) {
         decimal.price.stream.precision(abs(log10(tickPrice)));

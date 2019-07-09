@@ -334,7 +334,9 @@ namespace ₿ {
           : &orders.at(orderId);
       };
       mOrder *findsert(const mOrder &raw) {
-        if (raw.status == Status::Waiting and !raw.orderId.empty())
+        if ((raw.status == Status::WaitingToWork or
+             raw.status == Status::WaitingToTerminate)
+            and !raw.orderId.empty())
           return &(orders[raw.orderId] = raw);
         if (raw.orderId.empty() and !raw.exchangeId.empty()) {
           auto it = find_if(
@@ -406,6 +408,19 @@ namespace ₿ {
           report(order, " saved ");
           report_size();
         }
+        if (order) {
+          static unsigned rejection_count = 0;
+          if (order->status == Status::Rejected) {
+            rejection_count = rejection_count + 2;
+            Print::logWar("GW", string("Order ") + order->orderId + " rejected x" + to_string(rejection_count / 2));
+            if (rejection_count > 60) {
+              error("GW", "many orders rejected !!!!!", true);
+            }
+          } else {
+            if (rejection_count > 0)
+              -- rejection_count;
+          }
+        }
         return order;
       };
       bool replace(const Price &price, const bool &isPong, mOrder *const order) {
@@ -436,7 +451,8 @@ namespace ₿ {
           order->side,
           order->isPong
         };
-        if (order->status == Status::Terminated)
+        if (order->status == Status::Terminated
+          or order->status == Status::Rejected)
           purge(order);
         broadcast();
         Print::repaint();
@@ -2218,7 +2234,8 @@ namespace ₿ {
         if (stillAlive(order)) {
           if (abs(order.price - quote.price) < K.gateway->tickPrice)
             quote.skip();
-          else if (order.status == Status::Waiting) {
+          else if (order.status == Status::WaitingToWork
+              or order.status == Status::WaitingToTerminate) {
             if (qp.safety != mQuotingSafety::AK47
               or !--bullets
             ) quote.skip();
@@ -2247,7 +2264,8 @@ namespace ₿ {
         quotes.ask.state = state;
       };
       bool stillAlive(const mOrder &order) {
-        if (order.status == Status::Waiting) {
+        if (order.status == Status::WaitingToWork
+            or order.status == Status::WaitingToTerminate) {
           if (Tstamp - 10e+3 > order.time) {
             zombies.push_back(&order);
             return false;
