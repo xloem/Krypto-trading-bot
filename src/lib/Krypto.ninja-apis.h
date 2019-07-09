@@ -150,14 +150,12 @@ namespace ₿ {
   };
 
   class Curl {
-    private:
-      static mutex waiting_reply;
     public:
-      static const char *inet;
+      static function<void(CURL*)> global_setopt;
       static const json xfer(const string &url, const long &timeout = 13) {
         return perform(url, [&](CURL *curl) {
           curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);
-        }, timeout == 13);
+        });
       };
       static const json xfer(const string &url, const string &post) {
         return perform(url, [&](CURL *curl) {
@@ -167,27 +165,29 @@ namespace ₿ {
           curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post.data());
         });
       };
-      static const json perform(const string &url, function<void(CURL *curl)> setopt, bool debug = true) {
+      static const json perform(const string &url, const function<void(CURL*)> custom_setopt) {
+        static mutex waiting_reply;
         lock_guard<mutex> lock(waiting_reply);
         string reply;
         CURLcode res = CURLE_FAILED_INIT;
         CURL *curl = curl_easy_init();
         if (curl) {
-          setopt(curl);
-          curl_easy_setopt(curl, CURLOPT_USERAGENT, "K");
-          curl_easy_setopt(curl, CURLOPT_INTERFACE, inet);
+          custom_setopt(curl);
+          global_setopt(curl);
           curl_easy_setopt(curl, CURLOPT_URL, url.data());
           curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, &write);
           curl_easy_setopt(curl, CURLOPT_WRITEDATA, &reply);
           res = curl_easy_perform(curl);
           curl_easy_cleanup(curl);
         }
-        return (debug and res != CURLE_OK)
-          ? (json){ {"error", string("CURL Error: ") + curl_easy_strerror(res)} }
-          : (json::accept(reply)
+        return res == CURLE_OK
+          ? (json::accept(reply)
               ? json::parse(reply)
               : json::object()
-            );
+            )
+          : (json){
+              {"error", string("CURL Error: ") + curl_easy_strerror(res)}
+            };
       };
     private:
       static size_t write(void *buf, size_t size, size_t nmemb, void *reply) {
@@ -355,13 +355,17 @@ namespace ₿ {
           {
             stream << fixed;
           };
-          const double truncate(const double &input) const {
+          const double round(const double &input) const {
             const double points = pow(10, -1 * stream.precision());
-            return floor(input / points) * points;
+            return ::round(input / points) * points;
+          };
+          const double floor(const double &input) const {
+            const double points = pow(10, -1 * stream.precision());
+            return ::floor(input / points) * points;
           };
           const string str(const double &input) {
             stream.str("");
-            stream << truncate(input);
+            stream << round(input);
             return stream.str();
           };
       };
@@ -512,9 +516,9 @@ namespace ₿ {
         } else
           reply = handshake();
         minTick = reply.value("minTick", 0.0);
-        minSize = reply.value("minSize", 0.0);
-        makeFee = reply.value("makeFee", 0.0);
-        takeFee = reply.value("takeFee", 0.0);
+        if (!minSize) minSize = reply.value("minSize", 0.0);
+        if (!makeFee) makeFee = reply.value("makeFee", 0.0);
+        if (!takeFee) takeFee = reply.value("takeFee", 0.0);
         if (!file.is_open() and minTick and minSize) {
           file.open(cache, fstream::out | fstream::trunc);
           file << reply.dump();
@@ -621,8 +625,8 @@ namespace ₿ {
     public:
       const json handshake() override {
         return {
-          {"minTick", 0.01   },
-          {"minSize", 0.01   },
+          {"minTick", 1e-2   },
+          {"minSize", 1e-2   },
           {  "reply", nullptr}
         };
       };
@@ -838,16 +842,14 @@ namespace ₿ {
         randId = Random::int45Id;
       };
       const json handshake() override {
-        const json reply = Curl::xfer(http + "/public?command=returnTicker");
-        Price minTick = 0;
-        if (reply.find(quote + "_" + base) != reply.end()) {
-          istringstream iss("1e-" + to_string(6-reply.at(quote + "_" + base).at("last").get<string>().find(".")));
-          iss >> minTick;
-        }
+        const json reply = Curl::xfer(http + "/public?command=returnTicker")
+                             .value(quote + "_" + base, json::object());
         return {
-          {"minTick", minTick},
-          {"minSize", 0.001  },
-          {  "reply", reply  }
+          {"minTick", reply.empty()
+                        ? 0
+                        : 1e-8     },
+          {"minSize", 1e-3         },
+          {  "reply", reply        }
         };
       };
     protected:
