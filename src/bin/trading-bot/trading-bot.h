@@ -101,7 +101,7 @@ class Engine: public Klass {
     };
     void run() override {
       K.timer_1s([&](const unsigned int &tick) {
-        if (K.gateway->waiting() and !levels.warn_empty()) {
+        if (K.gateway->connected() and !levels.warn_empty()) {
           levels.timer_1s();
           if (!(tick % 60)) {
             levels.timer_60s();
@@ -110,7 +110,6 @@ class Engine: public Klass {
           wallet.safety.timer_1s();
           calcQuotes();
         }
-        return false;
       });
     };
   private:

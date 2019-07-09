@@ -74,6 +74,10 @@ namespace ₿ {
     mFairValueModel   fvModel                         = mFairValueModel::BBO;
     Amount            targetBasePosition              = 1.0;
     double            targetBasePositionPercentage    = 50.0;
+    Amount            targetBasePositionMin           = 0.1;
+    double            targetBasePositionPercentageMin = 10.0;
+    Amount            targetBasePositionMax           = 1;
+    double            targetBasePositionPercentageMax = 90.0;
     Amount            positionDivergence              = 0.9;
     Amount            positionDivergenceMin           = 0.4;
     double            positionDivergencePercentage    = 21.0;
@@ -130,66 +134,70 @@ namespace ₿ {
           extraShortEwmaPeriods,
           ultraShortEwmaPeriods
         };
-        widthPing                       = fmax(K.gateway->minTick, j.value("widthPing", widthPing));
-        widthPingPercentage             = fmin(1e+2, fmax(1e-3,    j.value("widthPingPercentage", widthPingPercentage)));
-        widthPong                       = fmax(K.gateway->minTick, j.value("widthPong", widthPong));
-        widthPongPercentage             = fmin(1e+2, fmax(1e-3,    j.value("widthPongPercentage", widthPongPercentage)));
-        widthPercentage                 =                          j.value("widthPercentage", widthPercentage);
-        bestWidth                       =                          j.value("bestWidth", bestWidth);
-        bestWidthSize                   = fmax(0,                  j.value("bestWidthSize", bestWidthSize));
-        buySize                         = fmax(K.gateway->minSize, j.value("buySize", buySize));
-        buySizePercentage               = fmin(1e+2, fmax(1e-3,    j.value("buySizePercentage", buySizePercentage)));
-        buySizeMax                      =                          j.value("buySizeMax", buySizeMax);
-        sellSize                        = fmax(K.gateway->minSize, j.value("sellSize", sellSize));
-        sellSizePercentage              = fmin(1e+2, fmax(1e-3,    j.value("sellSizePercentage", sellSizePercentage)));
-        sellSizeMax                     =                          j.value("sellSizeMax", sellSizeMax);
-        pingAt                          =                          j.value("pingAt", pingAt);
-        pongAt                          =                          j.value("pongAt", pongAt);
-        mode                            =                          j.value("mode", mode);
-        safety                          =                          j.value("safety", safety);
-        bullets                         = fmin(10, fmax(1,         j.value("bullets", bullets)));
-        range                           =                          j.value("range", range);
-        rangePercentage                 = fmin(1e+2, fmax(1e-3,    j.value("rangePercentage", rangePercentage)));
-        fvModel                         =                          j.value("fvModel", fvModel);
-        targetBasePosition              =                          j.value("targetBasePosition", targetBasePosition);
-        targetBasePositionPercentage    = fmin(1e+2, fmax(0,       j.value("targetBasePositionPercentage", targetBasePositionPercentage)));
-        positionDivergenceMin           =                          j.value("positionDivergenceMin", positionDivergenceMin);
-        positionDivergenceMode          =                          j.value("positionDivergenceMode", positionDivergenceMode);
-        positionDivergence              =                          j.value("positionDivergence", positionDivergence);
-        positionDivergencePercentage    = fmin(1e+2, fmax(0,       j.value("positionDivergencePercentage", positionDivergencePercentage)));
-        positionDivergencePercentageMin = fmin(1e+2, fmax(0,       j.value("positionDivergencePercentageMin", positionDivergencePercentageMin)));
-        percentageValues                =                          j.value("percentageValues", percentageValues);
-        autoPositionMode                =                          j.value("autoPositionMode", autoPositionMode);
-        aggressivePositionRebalancing   =                          j.value("aggressivePositionRebalancing", aggressivePositionRebalancing);
-        superTrades                     =                          j.value("superTrades", superTrades);
-        tradesPerMinute                 =                          j.value("tradesPerMinute", tradesPerMinute);
-        tradeRateSeconds                = fmax(0,                  j.value("tradeRateSeconds", tradeRateSeconds));
-        protectionEwmaWidthPing         =                          j.value("protectionEwmaWidthPing", protectionEwmaWidthPing);
-        protectionEwmaQuotePrice        =                          j.value("protectionEwmaQuotePrice", protectionEwmaQuotePrice);
-        protectionEwmaPeriods           = fmax(1,                  j.value("protectionEwmaPeriods", protectionEwmaPeriods));
-        quotingStdevProtection          =                          j.value("quotingStdevProtection", quotingStdevProtection);
-        quotingStdevBollingerBands      =                          j.value("quotingStdevBollingerBands", quotingStdevBollingerBands);
-        quotingStdevProtectionFactor    =                          j.value("quotingStdevProtectionFactor", quotingStdevProtectionFactor);
-        quotingStdevProtectionPeriods   = fmax(1,                  j.value("quotingStdevProtectionPeriods", quotingStdevProtectionPeriods));
-        ewmaSensiblityPercentage        =                          j.value("ewmaSensiblityPercentage", ewmaSensiblityPercentage);
-        quotingEwmaTrendProtection      =                          j.value("quotingEwmaTrendProtection", quotingEwmaTrendProtection);
-        quotingEwmaTrendThreshold       =                          j.value("quotingEwmaTrendThreshold", quotingEwmaTrendThreshold);
-        veryLongEwmaPeriods             = fmax(1,                  j.value("veryLongEwmaPeriods", veryLongEwmaPeriods));
-        longEwmaPeriods                 = fmax(1,                  j.value("longEwmaPeriods", longEwmaPeriods));
-        mediumEwmaPeriods               = fmax(1,                  j.value("mediumEwmaPeriods", mediumEwmaPeriods));
-        shortEwmaPeriods                = fmax(1,                  j.value("shortEwmaPeriods", shortEwmaPeriods));
-        extraShortEwmaPeriods           = fmax(1,                  j.value("extraShortEwmaPeriods", extraShortEwmaPeriods));
-        ultraShortEwmaPeriods           = fmax(1,                  j.value("ultraShortEwmaPeriods", ultraShortEwmaPeriods));
-        aprMultiplier                   =                          j.value("aprMultiplier", aprMultiplier);
-        sopWidthMultiplier              =                          j.value("sopWidthMultiplier", sopWidthMultiplier);
-        sopSizeMultiplier               =                          j.value("sopSizeMultiplier", sopSizeMultiplier);
-        sopTradesMultiplier             =                          j.value("sopTradesMultiplier", sopTradesMultiplier);
-        cancelOrdersAuto                =                          j.value("cancelOrdersAuto", cancelOrdersAuto);
-        cleanPongsAuto                  =                          j.value("cleanPongsAuto", cleanPongsAuto);
-        profitHourInterval              =                          j.value("profitHourInterval", profitHourInterval);
-        localBalance                    =                          j.value("localBalance", localBalance);
-        audio                           =                          j.value("audio", audio);
-        delayUI                         = fmax(0,                  j.value("delayUI", delayUI));
+        widthPing                       = fmax(K.gateway->tickPrice, j.value("widthPing", widthPing));
+        widthPingPercentage             = fmin(1e+2, fmax(1e-3,      j.value("widthPingPercentage", widthPingPercentage)));
+        widthPong                       = fmax(K.gateway->tickPrice, j.value("widthPong", widthPong));
+        widthPongPercentage             = fmin(1e+2, fmax(1e-3,      j.value("widthPongPercentage", widthPongPercentage)));
+        widthPercentage                 =                            j.value("widthPercentage", widthPercentage);
+        bestWidth                       =                            j.value("bestWidth", bestWidth);
+        bestWidthSize                   = fmax(0,                    j.value("bestWidthSize", bestWidthSize));
+        buySize                         = fmax(K.gateway->minSize,   j.value("buySize", buySize));
+        buySizePercentage               = fmin(1e+2, fmax(1e-3,      j.value("buySizePercentage", buySizePercentage)));
+        buySizeMax                      =                            j.value("buySizeMax", buySizeMax);
+        sellSize                        = fmax(K.gateway->minSize,   j.value("sellSize", sellSize));
+        sellSizePercentage              = fmin(1e+2, fmax(1e-3,      j.value("sellSizePercentage", sellSizePercentage)));
+        sellSizeMax                     =                            j.value("sellSizeMax", sellSizeMax);
+        pingAt                          =                            j.value("pingAt", pingAt);
+        pongAt                          =                            j.value("pongAt", pongAt);
+        mode                            =                            j.value("mode", mode);
+        safety                          =                            j.value("safety", safety);
+        bullets                         = fmin(10, fmax(1,           j.value("bullets", bullets)));
+        range                           =                            j.value("range", range);
+        rangePercentage                 = fmin(1e+2, fmax(1e-3,      j.value("rangePercentage", rangePercentage)));
+        fvModel                         =                            j.value("fvModel", fvModel);
+        targetBasePosition              =                            j.value("targetBasePosition", targetBasePosition);
+        targetBasePositionPercentage    = fmin(1e+2, fmax(0,         j.value("targetBasePositionPercentage", targetBasePositionPercentage)));
+        targetBasePositionMin           =                            j.value("targetBasePositionMin", targetBasePositionMin);
+        targetBasePositionPercentageMin = fmin(1e+2, fmax(0,         j.value("targetBasePositionPercentageMin", targetBasePositionPercentageMin)));
+        targetBasePositionMax           =                            j.value("targetBasePositionMax", targetBasePositionMax);
+        targetBasePositionPercentageMax = fmin(1e+2, fmax(0,         j.value("targetBasePositionPercentageMax", targetBasePositionPercentageMax)));
+        positionDivergenceMin           =                            j.value("positionDivergenceMin", positionDivergenceMin);
+        positionDivergenceMode          =                            j.value("positionDivergenceMode", positionDivergenceMode);
+        positionDivergence              =                            j.value("positionDivergence", positionDivergence);
+        positionDivergencePercentage    = fmin(1e+2, fmax(0,         j.value("positionDivergencePercentage", positionDivergencePercentage)));
+        positionDivergencePercentageMin = fmin(1e+2, fmax(0,         j.value("positionDivergencePercentageMin", positionDivergencePercentageMin)));
+        percentageValues                =                            j.value("percentageValues", percentageValues);
+        autoPositionMode                =                            j.value("autoPositionMode", autoPositionMode);
+        aggressivePositionRebalancing   =                            j.value("aggressivePositionRebalancing", aggressivePositionRebalancing);
+        superTrades                     =                            j.value("superTrades", superTrades);
+        tradesPerMinute                 =                            j.value("tradesPerMinute", tradesPerMinute);
+        tradeRateSeconds                = fmax(0,                    j.value("tradeRateSeconds", tradeRateSeconds));
+        protectionEwmaWidthPing         =                            j.value("protectionEwmaWidthPing", protectionEwmaWidthPing);
+        protectionEwmaQuotePrice        =                            j.value("protectionEwmaQuotePrice", protectionEwmaQuotePrice);
+        protectionEwmaPeriods           = fmax(1,                    j.value("protectionEwmaPeriods", protectionEwmaPeriods));
+        quotingStdevProtection          =                            j.value("quotingStdevProtection", quotingStdevProtection);
+        quotingStdevBollingerBands      =                            j.value("quotingStdevBollingerBands", quotingStdevBollingerBands);
+        quotingStdevProtectionFactor    =                            j.value("quotingStdevProtectionFactor", quotingStdevProtectionFactor);
+        quotingStdevProtectionPeriods   = fmax(1,                    j.value("quotingStdevProtectionPeriods", quotingStdevProtectionPeriods));
+        ewmaSensiblityPercentage        =                            j.value("ewmaSensiblityPercentage", ewmaSensiblityPercentage);
+        quotingEwmaTrendProtection      =                            j.value("quotingEwmaTrendProtection", quotingEwmaTrendProtection);
+        quotingEwmaTrendThreshold       =                            j.value("quotingEwmaTrendThreshold", quotingEwmaTrendThreshold);
+        veryLongEwmaPeriods             = fmax(1,                    j.value("veryLongEwmaPeriods", veryLongEwmaPeriods));
+        longEwmaPeriods                 = fmax(1,                    j.value("longEwmaPeriods", longEwmaPeriods));
+        mediumEwmaPeriods               = fmax(1,                    j.value("mediumEwmaPeriods", mediumEwmaPeriods));
+        shortEwmaPeriods                = fmax(1,                    j.value("shortEwmaPeriods", shortEwmaPeriods));
+        extraShortEwmaPeriods           = fmax(1,                    j.value("extraShortEwmaPeriods", extraShortEwmaPeriods));
+        ultraShortEwmaPeriods           = fmax(1,                    j.value("ultraShortEwmaPeriods", ultraShortEwmaPeriods));
+        aprMultiplier                   =                            j.value("aprMultiplier", aprMultiplier);
+        sopWidthMultiplier              =                            j.value("sopWidthMultiplier", sopWidthMultiplier);
+        sopSizeMultiplier               =                            j.value("sopSizeMultiplier", sopSizeMultiplier);
+        sopTradesMultiplier             =                            j.value("sopTradesMultiplier", sopTradesMultiplier);
+        cancelOrdersAuto                =                            j.value("cancelOrdersAuto", cancelOrdersAuto);
+        cleanPongsAuto                  =                            j.value("cleanPongsAuto", cleanPongsAuto);
+        profitHourInterval              =                            j.value("profitHourInterval", profitHourInterval);
+        localBalance                    =                            j.value("localBalance", localBalance);
+        audio                           =                            j.value("audio", audio);
+        delayUI                         = fmax(0,                    j.value("delayUI", delayUI));
         if (mode == mQuotingMode::Depth)
           widthPercentage = false;
         K.gateway->askForCancelAll = cancelOrdersAuto;
@@ -212,11 +220,11 @@ namespace ₿ {
         backup();
         broadcast();
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::QuotingParameters;
       };
     private:
-      const string explain() const override {
+      string explain() const override {
         return "Quoting Parameters";
       };
       string explainKO() const override {
@@ -248,6 +256,10 @@ namespace ₿ {
       {                        "fvModel", k.fvModel                        },
       {             "targetBasePosition", k.targetBasePosition             },
       {   "targetBasePositionPercentage", k.targetBasePositionPercentage   },
+      {          "targetBasePositionMin", k.targetBasePositionMin          },
+      {"targetBasePositionPercentageMin", k.targetBasePositionPercentageMin},
+      {          "targetBasePositionMax", k.targetBasePositionMax          },
+      {"targetBasePositionPercentageMax", k.targetBasePositionPercentageMax},
       {             "positionDivergence", k.positionDivergence             },
       {   "positionDivergencePercentage", k.positionDivergencePercentage   },
       {          "positionDivergenceMin", k.positionDivergenceMin          },
@@ -300,7 +312,7 @@ namespace ₿ {
   struct mOrders: public Client::Broadcast<mOrders> {
     mLastOrder updated;
     private:
-      unordered_map<RandId, mOrder> orders;
+      unordered_map<string, mOrder> orders;
     private_ref:
       const KryptoNinja &K;
     public:
@@ -309,19 +321,19 @@ namespace ₿ {
         , updated()
         , K(bot)
       {};
-      mOrder *const find(const RandId &orderId) {
+      mOrder *find(const string &orderId) {
         return (orderId.empty()
           or orders.find(orderId) == orders.end()
         ) ? nullptr
           : &orders.at(orderId);
       };
-      mOrder *const findsert(const mOrder &raw) {
+      mOrder *findsert(const mOrder &raw) {
         if (raw.status == Status::Waiting and !raw.orderId.empty())
           return &(orders[raw.orderId] = raw);
         if (raw.orderId.empty() and !raw.exchangeId.empty()) {
           auto it = find_if(
             orders.begin(), orders.end(),
-            [&](const pair<RandId, mOrder> &it_) {
+            [&](const pair<string, mOrder> &it_) {
               return raw.exchangeId == it_.second.exchangeId;
             }
           );
@@ -330,7 +342,7 @@ namespace ₿ {
         }
         return find(raw.orderId);
       };
-      const Amount heldAmount(const Side &side) const {
+      Amount heldAmount(const Side &side) const {
         Amount held = 0;
         for (const auto &it : orders)
           if (it.second.side == side)
@@ -353,14 +365,14 @@ namespace ₿ {
             : *filterAskOrders
           )[it.second.price] += it.second.quantity;
       };
-      const vector<mOrder*> at(const Side &side) {
+      vector<mOrder*> at(const Side &side) {
         vector<mOrder*> sideOrders;
         for (auto &it : orders)
           if (side == it.second.side)
              sideOrders.push_back(&it.second);
         return sideOrders;
       };
-      const vector<mOrder*> working() {
+      vector<mOrder*> working() {
         vector<mOrder*> workingOrders;
         for (auto &it : orders)
           if (Status::Working == it.second.status
@@ -368,7 +380,7 @@ namespace ₿ {
           ) workingOrders.push_back(&it.second);
         return workingOrders;
       };
-      const vector<mOrder> working(const bool &sorted = false) const {
+      vector<mOrder> working(const bool &sorted = false) const {
         vector<mOrder> workingOrders;
         for (const auto &it : orders)
           if (Status::Working == it.second.status)
@@ -381,7 +393,7 @@ namespace ₿ {
           );
         return workingOrders;
       };
-      mOrder *const upsert(const mOrder &raw) {
+      mOrder *upsert(const mOrder &raw) {
         mOrder *const order = findsert(raw);
         mOrder::update(raw, order);
         if (K.arg<int>("debug-orders")) {
@@ -390,12 +402,12 @@ namespace ₿ {
         }
         return order;
       };
-      const bool replace(const Price &price, const bool &isPong, mOrder *const order) {
+      bool replace(const Price &price, const bool &isPong, mOrder *const order) {
         const bool allowed = mOrder::replace(price, isPong, order);
         if (K.arg<int>("debug-orders")) report(order, "replace");
         return allowed;
       };
-      const bool cancel(mOrder *const order) {
+      bool cancel(mOrder *const order) {
         const bool allowed = mOrder::cancel(order);
         if (K.arg<int>("debug-orders")) report(order, "cancel ");
         return allowed;
@@ -423,13 +435,13 @@ namespace ₿ {
         broadcast();
         Print::repaint();
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::OrderStatusReports;
       };
-      const bool realtime() const override {
+      bool realtime() const override {
         return false;
       };
-      const json blob() const override {
+      json blob() const override {
         return working();
       };
     private:
@@ -472,18 +484,15 @@ namespace ₿ {
         trades.push_back(raw);
         broadcast();
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::MarketTrade;
       };
-      const json blob() const override {
+      json blob() const override {
         return trades.back();
       };
-      const json hello() override {
+      json hello() override {
         return trades;
       };
-  };
-  static void to_json(json &j, const mMarketTakers &k) {
-    j = k.trades;
   };
 
   struct mFairLevelsPrice: public Client::Broadcast<mFairLevelsPrice> {
@@ -494,19 +503,19 @@ namespace ₿ {
         : Broadcast(bot)
         , fairValue(f)
       {};
-      const Price currentPrice() const {
+      Price currentPrice() const {
         return fairValue;
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::FairValue;
       };
-      const bool realtime() const override {
+      bool realtime() const override {
         return false;
       };
-      const bool read_same_blob() const override {
+      bool read_same_blob() const override {
         return false;
       };
-      const bool read_asap() const override {
+      bool read_asap() const override {
         return false;
       };
   };
@@ -559,13 +568,13 @@ namespace ₿ {
         ask  = calc(&askMean, "ask");
         top  = calc(&topMean, "top");
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::STDEVStats;
       };
-      const double limit() const override {
+      double limit() const override {
         return qp.quotingStdevProtectionPeriods;
       };
-      const Clock lifetime() const override {
+      Clock lifetime() const override {
         return 1e+3 * limit();
       };
     private:
@@ -620,13 +629,13 @@ namespace ₿ {
       mFairHistory(const KryptoNinja &bot)
         : VectorBackup(bot)
       {};
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::MarketDataLongTerm;
       };
-      const double limit() const override {
+      double limit() const override {
         return 5760;
       };
-      const Clock lifetime() const override {
+      Clock lifetime() const override {
         return 60e+3 * limit();
       };
     private:
@@ -668,10 +677,10 @@ namespace ₿ {
         calcTargetPositionAutoPercentage();
         backup();
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::EWMAStats;
       };
-      const Clock lifetime() const override {
+      Clock lifetime() const override {
         return 60e+3 * max(qp.veryLongEwmaPeriods,
                        max(qp.longEwmaPeriods,
                        max(qp.mediumEwmaPeriods,
@@ -738,7 +747,7 @@ namespace ₿ {
         }
         targetPositionAutoPercentage = ((1 + max(-1.0, min(1.0, targetPosition))) / 2) * 1e+2;
       };
-      const string explain() const override {
+      string explain() const override {
         return "EWMA Values";
       };
       string explainKO() const override {
@@ -779,10 +788,10 @@ namespace ₿ {
       , fairPrice(bot, f)
       , takerTrades(bot)
     {};
-    const mMatter about() const override {
+    mMatter about() const override {
       return mMatter::MarketChart;
     };
-    const bool realtime() const override {
+    bool realtime() const override {
       return false;
     };
   };
@@ -808,7 +817,7 @@ namespace ₿ {
         , unfiltered(u)
         , qp(q)
       {};
-      const bool empty() const {
+      bool empty() const {
         return patched
           ? bids.empty() and asks.empty()
           : bids.empty() or asks.empty();
@@ -819,15 +828,15 @@ namespace ₿ {
         if (!empty() and read) read();
         unfilter();
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::MarketData;
       };
-      const json hello() override {
+      json hello() override {
         unfilter();
         return Broadcast::hello();
       };
     private:
-      const bool ratelimit() {
+      bool ratelimit() {
         return unfiltered.bids.empty() or unfiltered.asks.empty() or empty()
           or !read_soon(qp.delayUI * 1e+3);
       };
@@ -890,7 +899,7 @@ namespace ₿ {
         , qp(q)
         , orders(o)
       {};
-      const bool warn_empty() const {
+      bool warn_empty() const {
         const bool err = bids.empty() or asks.empty();
         if (err and (float)clock()/CLOCKS_PER_SEC > 3.0)
           Print::logWar("QE", "Unable to calculate quote, missing market data");
@@ -904,7 +913,7 @@ namespace ₿ {
         stats.ewma.timer_60s(resetAverageWidth());
         stats.broadcast();
       };
-      const Price calcQuotesWidth(bool *const superSpread) const {
+      Price calcQuotesWidth(bool *const superSpread) const {
         const Price widthPing = fmax(
           qp.widthPercentage
             ? qp.widthPingPercentage * fairValue / 100
@@ -920,7 +929,7 @@ namespace ₿ {
         bids.clear();
         asks.clear();
       };
-      const bool ready() {
+      bool ready() {
         filter();
         return !(bids.empty() or asks.empty());
       };
@@ -948,7 +957,7 @@ namespace ₿ {
         );
         averageWidth /= ++averageCount;
       };
-      const Price resetAverageWidth() {
+      Price resetAverageWidth() {
         averageCount = 0;
         return averageWidth;
       };
@@ -973,13 +982,13 @@ namespace ₿ {
              + bids.cbegin()->size
         );
         if (fairValue)
-          fairValue = round(fairValue / K.gateway->minTick) * K.gateway->minTick;
+          fairValue = K.gateway->decimal.price.round(fairValue);
       };
-      const vector<mLevel> filter(vector<mLevel> levels, unordered_map<Price, Amount> *const filterOrders) {
+      vector<mLevel> filter(vector<mLevel> levels, unordered_map<Price, Amount> *const filterOrders) {
         if (!filterOrders->empty())
           for (auto it = levels.begin(); it != levels.end();) {
             for (auto it_ = filterOrders->begin(); it_ != filterOrders->end();)
-              if (abs(it->price - it_->first) < K.gateway->minTick) {
+              if (abs(it->price - it_->first) < K.gateway->tickPrice) {
                 it->size -= it_->second;
                 filterOrders->erase(it_);
                 break;
@@ -1029,25 +1038,25 @@ namespace ₿ {
         , K(bot)
         , qp(q)
       {};
-      const bool ratelimit() const {
+      bool ratelimit() const {
         return !empty() and crbegin()->time + 21e+3 > Tstamp;
       };
-      const double calcBaseDiff() const {
+      double calcBaseDiff() const {
         return calcDiffPercent(
           cbegin()->baseValue(),
           crbegin()->baseValue()
         );
       };
-      const double calcQuoteDiff() const {
+      double calcQuoteDiff() const {
         return calcDiffPercent(
           cbegin()->quoteValue(),
           crbegin()->quoteValue()
         );
       };
-      const double calcDiffPercent(Amount older, Amount newer) const {
+      double calcDiffPercent(Amount older, Amount newer) const {
         return K.gateway->decimal.percent.round(((newer - older) / newer) * 1e+2);
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::Profit;
       };
       void erase() override {
@@ -1056,10 +1065,10 @@ namespace ₿ {
           if (it->time + lifetime() > now) ++it;
           else it = rows.erase(it);
       };
-      const double limit() const override {
+      double limit() const override {
         return qp.profitHourInterval;
       };
-      const Clock lifetime() const override {
+      Clock lifetime() const override {
         return 3600e+3 * limit();
       };
     private:
@@ -1130,7 +1139,7 @@ namespace ₿ {
           K.clicked(this, order);
         }
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::SubmitNewOrder;
       };
   };
@@ -1144,9 +1153,9 @@ namespace ₿ {
       {};
       void click(const json &j) override {
         if ((j.is_object() and !j.value("orderId", "").empty()))
-          K.clicked(this, j.at("orderId").get<RandId>());
+          K.clicked(this, j.at("orderId").get<string>());
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::CancelOrder;
       };
   };
@@ -1158,10 +1167,10 @@ namespace ₿ {
         : Clickable(bot)
         , K(bot)
       {};
-      void click(const json &j) override {
+      void click(const json&) override {
         K.clicked(this);
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::CancelAllOrders;
       };
   };
@@ -1173,10 +1182,10 @@ namespace ₿ {
         : Clickable(bot)
         , K(bot)
       {};
-      void click(const json &j) override {
+      void click(const json&) override {
         K.clicked(this);
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::CleanAllClosedTrades;
       };
   };
@@ -1188,10 +1197,10 @@ namespace ₿ {
         : Clickable(bot)
         , K(bot)
       {};
-      void click(const json &j) override {
+      void click(const json&) override {
         K.clicked(this);
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::CleanAllTrades;
       };
   };
@@ -1207,7 +1216,7 @@ namespace ₿ {
         if ((j.is_object() and !j.value("tradeId", "").empty()))
           K.clicked(this, j.at("tradeId").get<string>());
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::CleanTrade;
       };
   };
@@ -1224,7 +1233,7 @@ namespace ₿ {
         if (j.is_array() and j.size() and j.at(0).is_string())
          content = j.at(0);
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::Notepad;
       };
   };
@@ -1316,27 +1325,27 @@ namespace ₿ {
         if (qp.cleanPongsAuto)
           clearPongsAuto();
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::Trades;
       };
       void erase() override {
         if (crbegin()->Kqty < 0) rows.pop_back();
       };
-      const json blob() const override {
+      json blob() const override {
         if (crbegin()->Kqty == -1) return nullptr;
         else return VectorBackup::blob();
       };
-      const string increment() const override {
+      string increment() const override {
         return crbegin()->tradeId;
       };
-      const json hello() override {
+      json hello() override {
         for (mOrderFilled &it : rows)
           it.loadedFromDB = true;
         return rows;
       };
     private:
       void clearAll() {
-        clear_if([](iterator it) {
+        clear_if([](iterator) {
           return true;
         });
       };
@@ -1360,7 +1369,7 @@ namespace ₿ {
           );
         });
       };
-      void clear_if(const function<const bool(iterator)> &fn, const bool &onlyOne = false) {
+      void clear_if(const function<bool(iterator)> &fn, const bool &onlyOne = false) {
         for (auto it = begin(); it != end();)
           if (fn(it)) {
             it->Kqty = -1;
@@ -1464,14 +1473,14 @@ namespace ₿ {
       ));
     };
     void expire() {
-      if (buys.size()) expire(&buys);
-      if (sells.size()) expire(&sells);
+      if (!buys.empty()) expire(&buys);
+      if (!sells.empty()) expire(&sells);
       skip();
       sumBuys = sum(&buys);
       sumSells = sum(&sells);
     };
     private:
-      const Amount sum(multimap<Price, mRecentTrade> *const k) const {
+      Amount sum(multimap<Price, mRecentTrade> *const k) const {
         Amount sum = 0;
         for (const auto &it : *k)
           sum += it.second.quantity;
@@ -1484,7 +1493,7 @@ namespace ₿ {
           else it = k->erase(it);
       };
       void skip() {
-        while (buys.size() and sells.size()) {
+        while (!(buys.empty() or sells.empty())) {
           mRecentTrade &buy = buys.rbegin()->second;
           mRecentTrade &sell = sells.begin()->second;
           if (sell.price < buy.price) break;
@@ -1545,13 +1554,13 @@ namespace ₿ {
         combined = (recentTrades.sumBuys + recentTrades.sumSells) / (buySize + sellSize);
         broadcast();
       };
-      const bool empty() const {
+      bool empty() const {
         return !baseValue or !buySize or !sellSize;
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::TradeSafetyValue;
       };
-      const bool read_same_blob() const override {
+      bool read_same_blob() const override {
         return false;
       };
     private:
@@ -1628,7 +1637,7 @@ namespace ₿ {
           if (matchPing(_near, _far, ping, qty, qtyMax, width, dir * fairValue, dir * it.second.price, it.second.quantity, it.second.price, it.second.Kqty, reverse))
             break;
       };
-      const bool matchPing(bool _near, bool _far, Price *ping, Amount *qty, Amount qtyMax, Price width, Price fv, Price price, Amount qtyTrade, Price priceTrade, Amount KqtyTrade, bool reverse) {
+      bool matchPing(bool _near, bool _far, Price *ping, Amount *qty, Amount qtyMax, Price width, Price fv, Price price, Amount qtyTrade, Price priceTrade, Amount KqtyTrade, bool reverse) {
         if (reverse) { fv *= -1; price *= -1; width *= -1; }
         if (((!_near and !_far) or *qty < qtyMax)
           and (_far ? fv > price : true)
@@ -1679,7 +1688,22 @@ namespace ₿ {
             ? (qp.percentageValues
               ? qp.targetBasePositionPercentage * baseValue / 1e+2
               : qp.targetBasePosition)
-            : targetPositionAutoPercentage * baseValue / 1e+2
+            : (qp.percentageValues
+              ? fmin(
+                  fmax(
+                    targetPositionAutoPercentage,
+                    qp.targetBasePositionPercentageMin
+                  ),
+                  qp.targetBasePositionPercentageMax
+                ) * baseValue / 1e+2
+              : fmin(
+                  fmax(
+                    targetPositionAutoPercentage * baseValue / 1e+2,
+                    qp.targetBasePositionPercentageMin
+                  ),
+                  qp.targetBasePositionPercentageMax
+                )
+            )
         );
         calcPDiv();
         if (broadcast()) {
@@ -1687,22 +1711,22 @@ namespace ₿ {
           if (K.arg<int>("debug-wallet")) report();
         }
       };
-      const bool warn_empty() const {
+      bool warn_empty() const {
         const bool err = empty();
         if (err and (float)clock()/CLOCKS_PER_SEC > 3.0)
           Print::logWar("PG", "Unable to calculate TBP, missing wallet data");
         return err;
       };
-      const bool empty() const {
+      bool empty() const {
         return !baseValue;
       };
-      const bool realtime() const override {
+      bool realtime() const override {
         return false;
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::TargetBasePosition;
       };
-      const bool read_same_blob() const override {
+      bool read_same_blob() const override {
         return false;
       };
     private:
@@ -1731,7 +1755,7 @@ namespace ₿ {
           + to_string((int)(positionDivergence / baseValue * 1e+2)) + "% = " + K.gateway->decimal.amount.str(positionDivergence)
           + " " + K.gateway->base);
       };
-      const string explain() const override {
+      string explain() const override {
         return to_string(targetBasePosition);
       };
       string explainOK() const override {
@@ -1770,7 +1794,7 @@ namespace ₿ {
         , orders(o)
         , fairValue(l.fairValue)
       {};
-      const bool ready() const {
+      bool ready() const {
         return !safety.empty();
       };
       void read_from_gw(const mWallets &raw) {
@@ -1794,16 +1818,16 @@ namespace ₿ {
         calcHeldAmount(order.side);
         calcFundsSilently();
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::Position;
       };
-      const bool realtime() const override {
+      bool realtime() const override {
         return false;
       };
-      const bool read_asap() const override {
+      bool read_asap() const override {
         return false;
       };
-      const bool read_same_blob() const override {
+      bool read_same_blob() const override {
         return false;
       };
     private:
@@ -1885,7 +1909,7 @@ namespace ₿ {
     mQuote(const Side &s)
       : side(s)
     {};
-    const bool empty() const {
+    bool empty() const {
       return !size or !price;
     };
     void skip() {
@@ -1895,8 +1919,8 @@ namespace ₿ {
       price = size = 0;
       state = reason;
     };
-    virtual const bool deprecates(const Price&) const = 0;
-    const bool checkCrossed(const mQuote &opposite) {
+    virtual bool deprecates(const Price&) const = 0;
+    bool checkCrossed(const mQuote &opposite) {
       if (empty()) return false;
       if (opposite.empty() or deprecates(opposite.price)) {
         state = mQuoteState::Live;
@@ -1910,7 +1934,7 @@ namespace ₿ {
     mQuoteBid()
       : mQuote(Side::Bid)
     {};
-    const bool deprecates(const Price &higher) const override {
+    bool deprecates(const Price &higher) const override {
       return price < higher;
     };
   };
@@ -1918,7 +1942,7 @@ namespace ₿ {
     mQuoteAsk()
       : mQuote(Side::Ask)
     {};
-    const bool deprecates(const Price &lower) const override {
+    bool deprecates(const Price &lower) const override {
       return price > lower;
     };
   };
@@ -1977,7 +2001,7 @@ namespace ₿ {
       void calcRawQuotes() const  {
         calcRawQuotesFromMarket(
           levels,
-          K.gateway->minTick,
+          K.gateway->tickPrice,
           levels.calcQuotesWidth(&quotes.superSpread),
           wallet.safety.buySize,
           wallet.safety.sellSize,
@@ -2000,11 +2024,11 @@ namespace ₿ {
         else if (qp.mode == mQuotingMode::Depth)       calcRawQuotesFromMarket = calcDepthOfMarket;
         else error("QE", "Invalid quoting mode saved, consider to remove the database file");
       };
-      static void quoteAtTopOfMarket(const mMarketLevels &levels, const Price &minTick, mQuotes &quotes) {
-        const mLevel &topBid = levels.bids.begin()->size > minTick
+      static void quoteAtTopOfMarket(const mMarketLevels &levels, const Price &tickPrice, mQuotes &quotes) {
+        const mLevel &topBid = levels.bids.begin()->size > tickPrice
           ? levels.bids.at(0)
           : levels.bids.at(levels.bids.size() > 1 ? 1 : 0);
-        const mLevel &topAsk = levels.asks.begin()->size > minTick
+        const mLevel &topAsk = levels.asks.begin()->size > tickPrice
           ? levels.asks.at(0)
           : levels.asks.at(levels.asks.size() > 1 ? 1 : 0);
         quotes.bid.price = topBid.price;
@@ -2012,21 +2036,21 @@ namespace ₿ {
       };
       static void calcTopOfMarket(
         const mMarketLevels &levels,
-        const Price         &minTick,
+        const Price         &tickPrice,
         const Price         &widthPing,
         const Amount        &bidSize,
         const Amount        &askSize,
               mQuotes       &quotes
       ) {
-        quoteAtTopOfMarket(levels, minTick, quotes);
-        quotes.bid.price = fmin(levels.fairValue - widthPing / 2.0, quotes.bid.price + minTick);
-        quotes.ask.price = fmax(levels.fairValue + widthPing / 2.0, quotes.ask.price - minTick);
+        quoteAtTopOfMarket(levels, tickPrice, quotes);
+        quotes.bid.price = fmin(levels.fairValue - widthPing / 2.0, quotes.bid.price + tickPrice);
+        quotes.ask.price = fmax(levels.fairValue + widthPing / 2.0, quotes.ask.price - tickPrice);
         quotes.bid.size = bidSize;
         quotes.ask.size = askSize;
       };
       static void calcMidOfMarket(
         const mMarketLevels &levels,
-        const Price         &minTick,
+        const Price         &,
         const Price         &widthPing,
         const Amount        &bidSize,
         const Amount        &askSize,
@@ -2039,13 +2063,13 @@ namespace ₿ {
       };
       static void calcJoinMarket(
         const mMarketLevels &levels,
-        const Price         &minTick,
+        const Price         &tickPrice,
         const Price         &widthPing,
         const Amount        &bidSize,
         const Amount        &askSize,
               mQuotes       &quotes
       ) {
-        quoteAtTopOfMarket(levels, minTick, quotes);
+        quoteAtTopOfMarket(levels, tickPrice, quotes);
         quotes.bid.price = fmin(levels.fairValue - widthPing / 2.0, quotes.bid.price);
         quotes.ask.price = fmax(levels.fairValue + widthPing / 2.0, quotes.ask.price);
         quotes.bid.size = bidSize;
@@ -2053,13 +2077,13 @@ namespace ₿ {
       };
       static void calcInverseJoinMarket(
         const mMarketLevels &levels,
-        const Price         &minTick,
+        const Price         &tickPrice,
         const Price         &widthPing,
         const Amount        &bidSize,
         const Amount        &askSize,
               mQuotes       &quotes
       ) {
-        quoteAtTopOfMarket(levels, minTick, quotes);
+        quoteAtTopOfMarket(levels, tickPrice, quotes);
         Price mktWidth = abs(quotes.ask.price - quotes.bid.price);
         if (mktWidth > widthPing) {
           quotes.ask.price = quotes.ask.price + widthPing;
@@ -2074,20 +2098,20 @@ namespace ₿ {
       };
       static void calcInverseTopOfMarket(
         const mMarketLevels &levels,
-        const Price         &minTick,
+        const Price         &tickPrice,
         const Price         &widthPing,
         const Amount        &bidSize,
         const Amount        &askSize,
               mQuotes       &quotes
       ) {
-        quoteAtTopOfMarket(levels, minTick, quotes);
+        quoteAtTopOfMarket(levels, tickPrice, quotes);
         Price mktWidth = abs(quotes.ask.price - quotes.bid.price);
         if (mktWidth > widthPing) {
           quotes.ask.price = quotes.ask.price + widthPing;
           quotes.bid.price = quotes.bid.price - widthPing;
         }
-        quotes.bid.price = quotes.bid.price + minTick;
-        quotes.ask.price = quotes.ask.price - minTick;
+        quotes.bid.price = quotes.bid.price + tickPrice;
+        quotes.ask.price = quotes.ask.price - tickPrice;
         if (mktWidth < (2.0 * widthPing / 3.0)) {
           quotes.ask.price = quotes.ask.price + widthPing / 4.0;
           quotes.bid.price = quotes.bid.price - widthPing / 4.0;
@@ -2097,13 +2121,13 @@ namespace ₿ {
       };
       static void calcColossusOfMarket(
         const mMarketLevels &levels,
-        const Price         &minTick,
-        const Price         &widthPing,
+        const Price         &tickPrice,
+        const Price         &,
         const Amount        &bidSize,
         const Amount        &askSize,
               mQuotes       &quotes
       ) {
-        quoteAtTopOfMarket(levels, minTick, quotes);
+        quoteAtTopOfMarket(levels, tickPrice, quotes);
         quotes.bid.size = 0;
         quotes.ask.size = 0;
         for (const mLevel &it : levels.bids)
@@ -2116,14 +2140,14 @@ namespace ₿ {
             quotes.ask.size = it.size;
             quotes.ask.price = it.price;
           }
-        if (quotes.bid.size) quotes.bid.price += minTick;
-        if (quotes.ask.size) quotes.ask.price -= minTick;
+        if (quotes.bid.size) quotes.bid.price += tickPrice;
+        if (quotes.ask.size) quotes.ask.price -= tickPrice;
         quotes.bid.size = bidSize;
         quotes.ask.size = askSize;
       };
       static void calcDepthOfMarket(
         const mMarketLevels &levels,
-        const Price         &minTick,
+        const Price         &,
         const Price         &depth,
         const Amount        &bidSize,
         const Amount        &askSize,
@@ -2175,7 +2199,6 @@ namespace ₿ {
       {};
       vector<const mOrder*> clear() {
         broadcast();
-        states(mQuoteState::MissingData);
         countWaiting =
         countWorking = 0;
         vector<const mOrder*> zombies_;
@@ -2193,9 +2216,9 @@ namespace ₿ {
         dummyMM.calcRawQuotes();
         applyQuotingParameters();
       };
-      const bool abandon(const mOrder &order, mQuote &quote, unsigned int &bullets) {
+      bool abandon(const mOrder &order, mQuote &quote, unsigned int &bullets) {
         if (stillAlive(order)) {
-          if (abs(order.price - quote.price) < K.gateway->minTick)
+          if (abs(order.price - quote.price) < K.gateway->tickPrice)
             quote.skip();
           else if (order.status == Status::Waiting) {
             if (qp.safety != mQuotingSafety::AK47
@@ -2211,13 +2234,13 @@ namespace ₿ {
         }
         return false;
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::QuoteStatus;
       };
-      const bool realtime() const override {
+      bool realtime() const override {
         return false;
       };
-      const bool read_same_blob() const override {
+      bool read_same_blob() const override {
         return false;
       };
     private:
@@ -2225,7 +2248,7 @@ namespace ₿ {
         quotes.bid.state =
         quotes.ask.state = state;
       };
-      const bool stillAlive(const mOrder &order) {
+      bool stillAlive(const mOrder &order) {
         if (order.status == Status::Waiting) {
           if (Tstamp - 10e+3 > order.time) {
             zombies.push_back(&order);
@@ -2358,7 +2381,7 @@ namespace ₿ {
                 or qp.pongAt == mPongAt::AveragePingAggressive
                 or qp.pongAt == mPongAt::LongPingAggressive
             )
-          ) quotes.ask.price = max(levels.bids.at(0).price + K.gateway->minTick, sellPong);
+          ) quotes.ask.price = max(levels.bids.at(0).price + K.gateway->tickPrice, sellPong);
           quotes.ask.isPong = quotes.ask.price >= sellPong;
         }
         if (!quotes.bid.empty() and wallet.safety.sellPing) {
@@ -2370,7 +2393,7 @@ namespace ₿ {
                 or qp.pongAt == mPongAt::AveragePingAggressive
                 or qp.pongAt == mPongAt::LongPingAggressive
             )
-          ) quotes.bid.price = min(levels.asks.at(0).price - K.gateway->minTick, buyPong);
+          ) quotes.bid.price = min(levels.asks.at(0).price - K.gateway->tickPrice, buyPong);
           quotes.bid.isPong = quotes.bid.price <= buyPong;
         }
       };
@@ -2394,7 +2417,7 @@ namespace ₿ {
             if (it.price > quotes.ask.price) {
               depth += it.size;
               if (depth <= bestWidthSize) continue;
-              const Price bestAsk = it.price - K.gateway->minTick;
+              const Price bestAsk = it.price - K.gateway->tickPrice;
               if (bestAsk > quotes.ask.price)
                 quotes.ask.price = bestAsk;
               break;
@@ -2405,7 +2428,7 @@ namespace ₿ {
             if (it.price < quotes.bid.price) {
               depth += it.size;
               if (depth <= bestWidthSize) continue;
-              const Price bestBid = it.price + K.gateway->minTick;
+              const Price bestBid = it.price + K.gateway->tickPrice;
               if (bestBid < quotes.bid.price)
                 quotes.bid.price = bestBid;
               break;
@@ -2425,12 +2448,12 @@ namespace ₿ {
         if (!quotes.bid.empty())
           quotes.bid.price = fmax(
             0,
-            round(quotes.bid.price / K.gateway->minTick) * K.gateway->minTick
+            K.gateway->decimal.price.round(quotes.bid.price)
           );
         if (!quotes.ask.empty())
           quotes.ask.price = fmax(
-            quotes.bid.price + K.gateway->minTick,
-            round(quotes.ask.price / K.gateway->minTick) * K.gateway->minTick
+            quotes.bid.price + K.gateway->tickPrice,
+            K.gateway->decimal.price.round(quotes.ask.price)
           );
       };
       void applyRoundSize() {
@@ -2521,10 +2544,10 @@ namespace ₿ {
           and j.at("agree").get<Connectivity>() != adminAgreement
         ) toggle();
       };
-      const bool paused() const {
+      bool paused() const {
         return !(bool)greenButton;
       };
-      const bool offline() const {
+      bool offline() const {
         return !(bool)greenGateway;
       };
       void agree(const bool &agreement) {
@@ -2536,7 +2559,7 @@ namespace ₿ {
           switchFlag();
         }
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::Connectivity;
       };
     private:
@@ -2583,14 +2606,14 @@ namespace ₿ {
         , qp(q)
         , orders(o)
       {};
-      const bool ready() {
+      bool ready() {
         if (semaphore.offline()) {
           calculon.offline();
           return false;
         }
         return true;
       };
-      const bool calcQuotes() {
+      bool calcQuotes() {
         if (semaphore.paused()) {
           calculon.paused();
           return false;
@@ -2598,7 +2621,7 @@ namespace ₿ {
         calculon.calcQuotes();
         return true;
       };
-      const vector<mOrder*> abandon(mQuote &quote) {
+      vector<mOrder*> abandon(mQuote &quote) {
         vector<mOrder*> abandoned;
         unsigned int bullets = qp.bullets;
         const bool all = quote.state != mQuoteState::Live;
@@ -2636,18 +2659,20 @@ namespace ₿ {
         : Broadcast(bot)
         , K(bot)
       {};
-      const json to_json() const {
+      json to_json() const {
         return {
           {   "exchange", K.gateway->exchange        },
           {       "base", K.gateway->base            },
           {      "quote", K.gateway->quote           },
-          {    "minTick", K.gateway->minTick         },
+          {  "tickPrice", K.gateway->tickPrice       },
+          {   "tickSize", K.gateway->tickSize        },
+          {    "minSize", K.gateway->minSize         },
           {       "inet", K.arg<string>("interface") },
           {"environment", K.arg<string>("title")     },
           { "matryoshka", K.arg<string>("matryoshka")}
         };
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::ProductAdvertisement;
       };
   };
@@ -2672,7 +2697,7 @@ namespace ₿ {
         broadcast();
         orders_60s = 0;
       };
-      const json to_json() const {
+      json to_json() const {
         return {
           {  "addr", K.gateway->unlock           },
           {  "freq", orders_60s                  },
@@ -2682,7 +2707,7 @@ namespace ₿ {
           {"dbsize", K.dbSize()                  }
         };
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::ApplicationState;
       };
   };

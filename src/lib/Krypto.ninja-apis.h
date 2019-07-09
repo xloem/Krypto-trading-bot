@@ -11,8 +11,8 @@ namespace ₿ {
   enum class    OrderType: unsigned int { Limit, Market };
 
   struct mLevel {
-     Price price;
-    Amount size;
+     Price price = 0;
+    Amount size  = 0;
   };
   static void to_json(json &j, const mLevel &k) {
     j = {
@@ -32,12 +32,12 @@ namespace ₿ {
   };
 
   struct mWallet {
-    CoinId currency;
-    Amount amount,
-           held,
-           total,
-           value;
-    double profit;
+    string currency = "";
+    Amount amount   = 0,
+           held     = 0,
+           total    = 0,
+           value    = 0;
+    double profit   = 0;
     static void reset(const Amount &a, const Amount &h, mWallet *const wallet) {
       wallet->total = (wallet->amount = a)
                     + (wallet->held   = h);
@@ -63,10 +63,10 @@ namespace ₿ {
   };
 
   struct mTrade {
-      Side side;
-     Price price;
-    Amount quantity;
-     Clock time;
+      Side side     = (Side)0;
+     Price price    = 0;
+    Amount quantity = 0;
+     Clock time     = 0;
   };
   static void to_json(json &j, const mTrade &k) {
     j = {
@@ -78,25 +78,25 @@ namespace ₿ {
   };
 
   struct mOrder: public mTrade {
-           bool isPong;
-         RandId orderId,
-                exchangeId;
-         Status status;
-         Amount tradeQuantity;
-      OrderType type;
-    TimeInForce timeInForce;
-           bool disablePostOnly;
-          Clock latency;
+           bool isPong          = false;
+         string orderId         = "",
+                exchangeId      = "";
+         Status status          = (Status)0;
+         Amount tradeQuantity   = 0;
+      OrderType type            = (OrderType)0;
+    TimeInForce timeInForce     = (TimeInForce)0;
+           bool disablePostOnly = false;
+          Clock latency         = 0;
     static void update(const mOrder &raw, mOrder *const order) {
       if (!order) return;
       if (Status::Working == (     order->status     = raw.status
       ) and !order->latency)       order->latency    = raw.time - order->time;
-                                   order->time       = raw.time;
+      order->time = raw.time;
       if (!raw.exchangeId.empty()) order->exchangeId = raw.exchangeId;
       if (raw.price)               order->price      = raw.price;
       if (raw.quantity)            order->quantity   = raw.quantity;
     };
-    static const bool replace(const Price &price, const bool &isPong, mOrder *const order) {
+    static bool replace(const Price &price, const bool &isPong, mOrder *const order) {
       if (!order
         or order->exchangeId.empty()
       ) return false;
@@ -105,7 +105,7 @@ namespace ₿ {
       order->time   = Tstamp;
       return true;
     };
-    static const bool cancel(mOrder *const order) {
+    static bool cancel(mOrder *const order) {
       if (!order
         or order->exchangeId.empty()
         or order->status == Status::Waiting
@@ -159,15 +159,15 @@ namespace ₿ {
           {
             stream << fixed;
           };
-          const double round(const double &input) const {
+          double round(const double &input) const {
             const double points = pow(10, -1 * stream.precision());
             return ::round(input / points) * points;
           };
-          const double floor(const double &input) const {
+          double floor(const double &input) const {
             const double points = pow(10, -1 * stream.precision());
             return ::floor(input / points) * points;
           };
-          const string str(const double &input) {
+          string str(const double &input) {
             stream.str("");
             stream << round(input);
             return stream.str();
@@ -179,6 +179,7 @@ namespace ₿ {
                 amount,
                 percent;
       } decimal;
+      curl_socket_t loopfd = 0;
       function<void(const mOrder&)>       write_mOrder;
       function<void(const mTrade&)>       write_mTrade;
       function<void(const mLevels&)>      write_mLevels;
@@ -187,9 +188,9 @@ namespace ₿ {
       bool askForFees      = false,
            askForReplace   = false,
            askForCancelAll = false;
-      const RandId (*randId)() = nullptr;
-      virtual const bool askForData(const unsigned int &tick) = 0;
-      virtual const bool waitForData() = 0;
+      string (*randId)() = nullptr;
+      virtual void askForData(const unsigned int &tick) = 0;
+      virtual void waitForData(Loop *const loop) = 0;
       void place(const mOrder *const order) {
         place(
           order->orderId,
@@ -214,95 +215,97 @@ namespace ₿ {
         );
       };
 //BO non-free Gw library functions from build-*/local/lib/K-*.a (it just redefines all virtual gateway class members below).
-/**/  virtual bool ready(uS::Loop *const) = 0;                               // wait for exchange and register data handlers
-/**/  virtual void replace(RandId, string) {};                               // call         async orders data from exchange
-/**/  virtual void place(RandId, Side, string, string, OrderType, TimeInForce, bool) = 0, // async orders like above / below
-/**/               cancel(RandId, RandId) = 0,                               // call         async orders data from exchange
-/**/               close() = 0;                                              // disconnect but without waiting for reconnect
+/**/  virtual bool   ready() = 0;                                            // wait for exchange and register data handlers
+/**/  virtual void replace(string, string) {};                               // call         async orders data from exchange
+/**/  virtual void   place(string, Side, string, string, OrderType, TimeInForce, bool) = 0; // async orders like above/below
+/**/  virtual void  cancel(string, string) = 0;                              // call         async orders data from exchange
 /**/protected:
-/**/  virtual bool            async_wallet() { return false; };              // call         async wallet data from exchange
-/**/  virtual vector<mWallets> sync_wallet() { return {}; };                 // call and read sync wallet data from exchange
-/**/  virtual vector<mLevels>  sync_levels() { return {}; };                 // call and read sync levels data from exchange
-/**/  virtual vector<mTrade>   sync_trades() { return {}; };                 // call and read sync trades data from exchange
-/**/  virtual vector<mOrder>   sync_orders() { return {}; };                 // call and read sync orders data from exchange
-/**/  virtual vector<mOrder>   sync_cancelAll() = 0;                         // call and read sync orders data from exchange
+/**/  virtual             bool async_wallet()    { return false; };          // call         async wallet data from exchange
+/**/  virtual             bool async_cancelAll() { return false; };          // call         async orders data from exchange
+/**/  virtual vector<mWallets>  sync_wallet()    { return {}; };             // call and read sync wallet data from exchange
+/**/  virtual  vector<mLevels>  sync_levels()    { return {}; };             // call and read sync levels data from exchange
+/**/  virtual   vector<mTrade>  sync_trades()    { return {}; };             // call and read sync trades data from exchange
+/**/  virtual   vector<mOrder>  sync_orders()    { return {}; };             // call and read sync orders data from exchange
+/**/  virtual   vector<mOrder>  sync_cancelAll() { return {}; };             // call and read sync orders data from exchange
 //EO non-free Gw library functions from build-*/local/lib/K-*.a (it just redefines all virtual gateway class members above).
+      void online(const Connectivity &connectivity = Connectivity::Connected) {
+        if (write_Connectivity)
+          write_Connectivity(connectivity);
+      };
+      void askForNeverAsyncData(const unsigned int &tick) {
+        if (((askForFees and !(askForFees = false))
+          or !(tick % 15))
+          and !async_wallet())    askFor(replyWallets,   eventWallets,   [&]() { return sync_wallet(); });
+        if ((askForCancelAll
+          and !(tick % 300))
+          and !async_cancelAll()) askFor(replyCancelAll, eventCancelAll, [&]() { return sync_cancelAll(); });
+      };
+      void askForSyncData(const unsigned int &tick) {
+        if (!(tick % 2))          askFor(replyOrders,    eventOrders,    [&]() { return sync_orders(); });
+        askForNeverAsyncData(tick);
+        if (!(tick % 3))          askFor(replyLevels,    eventLevels,    [&]() { return sync_levels(); });
+        if (!(tick % 60))         askFor(replyTrades,    eventTrades,    [&]() { return sync_trades(); });
+      };
+      void waitForNeverAsyncData(Loop *const loop) {
+        eventWallets   = loop->async([&]() { waitFor(replyWallets,   write_mWallets); });
+        eventCancelAll = loop->async([&]() { waitFor(replyCancelAll, write_mOrder); });
+      };
+      void waitForSyncData(Loop *const loop) {
+        eventOrders    = loop->async([&]() { waitFor(replyOrders,    write_mOrder); });
+        waitForNeverAsyncData(loop);
+        eventLevels    = loop->async([&]() { waitFor(replyLevels,    write_mLevels); });
+        eventTrades    = loop->async([&]() { waitFor(replyTrades,    write_mTrade); });
+      };
+    private:
+      Loop::Async* eventWallets   = nullptr;
+      Loop::Async* eventLevels    = nullptr;
+      Loop::Async* eventTrades    = nullptr;
+      Loop::Async* eventOrders    = nullptr;
+      Loop::Async* eventCancelAll = nullptr;
       future<vector<mWallets>> replyWallets;
-      future<vector<mLevels>> replyLevels;
-      future<vector<mTrade>> replyTrades;
-      future<vector<mOrder>> replyOrders;
-      future<vector<mOrder>> replyCancelAll;
-      const bool askForNeverAsyncData(const unsigned int &tick) {
-        bool waiting = false;
-        if ((askForFees
-          and !(askForFees = false)
-          ) or !(tick % 15)) waiting |= !(async_wallet() or !askFor(replyWallets, [&]() { return sync_wallet(); }));
-        if (askForCancelAll
-          and !(tick % 300)) waiting |= askFor(replyCancelAll, [&]() { return sync_cancelAll(); });
-        return waiting;
-      };
-      const bool askForSyncData(const unsigned int &tick) {
-        bool waiting = false;
-        if (!(tick % 2))     waiting |= askFor(replyOrders, [&]() { return sync_orders(); });
-                             waiting |= askForNeverAsyncData(tick);
-        if (!(tick % 3))     waiting |= askFor(replyLevels, [&]() { return sync_levels(); });
-        if (!(tick % 60))    waiting |= askFor(replyTrades, [&]() { return sync_trades(); });
-        return waiting;
-      };
-      const bool waitForNeverAsyncData() {
-        return waitFor(replyWallets,   write_mWallets)
-             | waitFor(replyCancelAll, write_mOrder);
-      };
-      const bool waitForSyncData() {
-        return waitFor(replyOrders,    write_mOrder)
-             | waitForNeverAsyncData()
-             | waitFor(replyLevels,    write_mLevels)
-             | waitFor(replyTrades,    write_mTrade);
-      };
-      template<typename T1, typename T2> const bool askFor(
+      future<vector<mLevels>>  replyLevels;
+      future<vector<mTrade>>   replyTrades;
+      future<vector<mOrder>>   replyOrders,
+                               replyCancelAll;
+      template<typename T1, typename T2> void askFor(
               future<vector<T1>> &reply,
-        const T2                 &read
+                     Loop::Async *event,
+        const                 T2 &read
       ) {
-        bool waiting = reply.valid();
-        if (!waiting) {
-          reply = ::async(launch::async, read);
-          waiting = true;
-        }
-        return waiting;
+        if (!reply.valid())
+          reply = ::async(launch::async, [this, event, read]() {
+            vector<T1> data = read();
+            event->wakeup();
+            return data;
+          });
       };
-      template<typename T> const unsigned int waitFor(
-              future<vector<T>>        &reply,
+      template<typename T> void waitFor(
+                     future<vector<T>> &reply,
         const function<void(const T&)> &write
       ) {
-        bool waiting = reply.valid();
-        if (waiting and reply.wait_for(chrono::nanoseconds(0)) == future_status::ready) {
+        if (reply.valid())
           for (T &it : reply.get()) write(it);
-          waiting = false;
-        }
-        return waiting;
       };
   };
 
   class GwExchange: public GwExchangeData {
     public:
       using Report = vector<pair<string, string>>;
-        string exchange, apikey,
-               secret,   pass,
-               http,     ws,
-               fix,      unlock;
-        CoinId base,     quote;
-           int version  = 0,
-               maxLevel = 0,
-               debug    = 0;
-         Price minTick  = 0;
-        Amount minSize  = 0,
-               makeFee  = 0,
-               takeFee  = 0;
-      virtual const bool waiting() {
-        return true;
-      };
-      virtual const json handshake() = 0;
-      const json handshake(const bool &nocache) {
+      string exchange, apikey, secret, pass,
+             base,     quote,  symbol,
+             http,     ws,     fix,
+             unlock;
+       Price tickPrice = 0;
+      Amount tickSize  = 0,
+             minSize   = 0,
+             makeFee   = 0,
+             takeFee   = 0;
+      size_t maxLevel  = 0;
+         int debug     = 0;
+      virtual void disconnect() {};
+      virtual bool connected() const { return true; };
+      virtual json handshake() = 0;
+      json handshake(const bool &nocache) {
         json reply;
         const string cache = "/var/lib/K/cache/handshake"
               + ('.' + exchange)
@@ -320,11 +323,18 @@ namespace ₿ {
           reply = json::parse(file);
         } else
           reply = handshake();
-        minTick = reply.value("minTick", 0.0);
+        base = reply.value("base", base);
+        quote = reply.value("quote", quote);
+        symbol = reply.value("symbol", symbol);
+        tickPrice = reply.value("tickPrice", 0.0);
+        tickSize = reply.value("tickSize", 0.0);
         if (!minSize) minSize = reply.value("minSize", 0.0);
         if (!makeFee) makeFee = reply.value("makeFee", 0.0);
         if (!takeFee) takeFee = reply.value("takeFee", 0.0);
-        if (!file.is_open() and minTick and minSize) {
+        if (!file.is_open()
+          and tickPrice and tickSize and minSize
+          and !base.empty() and !quote.empty()
+        ) {
           file.open(cache, fstream::out | fstream::trunc);
           file << reply.dump();
         }
@@ -333,50 +343,72 @@ namespace ₿ {
       };
       void end(const bool &dustybot = false) {
         if (dustybot)
-          log("--dustybot is enabled, remember to cancel manually any open order.");
+          print("--dustybot is enabled, remember to cancel manually any open order.");
         else if (write_mOrder) {
-          log("Attempting to cancel all open orders, please wait.");
+          print("Attempting to cancel all open orders, please wait.");
           for (mOrder &it : sync_cancelAll()) write_mOrder(it);
-          log("cancel all open orders OK");
+          print("cancel all open orders OK");
         }
-        close();
+        online(Connectivity::Disconnected);
+        disconnect();
       };
       void report(Report notes, const bool &nocache) {
-        decimal.price.stream.precision(abs(log10(minTick)));
-        decimal.amount.stream.precision(minTick < 1e-8 ? 10 : 8);
+        decimal.price.stream.precision(abs(log10(tickPrice)));
+        decimal.amount.stream.precision(abs(log10(tickSize)));
         decimal.percent.stream.precision(2);
         for (auto it : (Report){
-          {"symbols", base + "/" + quote},
-          {"minTick", decimal.amount.str(minTick)              },
-          {"minSize", decimal.amount.str(minSize)              },
-          {"makeFee", decimal.percent.str(makeFee * 1e+2) + "%"},
-          {"takeFee", decimal.percent.str(takeFee * 1e+2) + "%"}
+          {"symbols", base + "/" + quote + " ("
+                        + decimal.amount.str(tickSize) + "/"
+                        + decimal.price.str(tickPrice) + ")"                    },
+          {"minSize", decimal.amount.str(minSize) + " " + base                  },
+          {"makeFee", decimal.percent.str(makeFee * 1e+2) + "%"
+                        + (makeFee ? "" : " (please use --maker-fee argument!)")},
+          {"takeFee", decimal.percent.str(takeFee * 1e+2) + "%"
+                        + (takeFee ? "" : " (please use --taker-fee argument!)")}
         }) notes.push_back(it);
         string note = "handshake:";
         for (auto &it : notes)
           if (!it.second.empty())
             note += "\n- " + it.first + ": " + it.second;
-        log((nocache ? "" : "cached ") + note);
+        print((nocache ? "" : "cached ") + note);
       };
       void latency(const string &reason, const function<void()> &fn) {
-        log("latency check", "start");
+        print("latency check", "start");
         const Clock Tstart = Tstamp;
         fn();
         const Clock Tstop  = Tstamp;
-        log("latency check", "stop");
+        print("latency check", "stop");
         const unsigned int Tdiff = Tstop - Tstart;
-        log(reason + " took", to_string(Tdiff) + "ms of your time");
+        print(reason + " took", to_string(Tdiff) + "ms of your time");
         string result = "This result is ";
         if      (Tdiff < 2e+2) result += "very good; most traders don't enjoy such speed!";
         else if (Tdiff < 5e+2) result += "good; most traders get the same result";
         else if (Tdiff < 7e+2) result += "a bit bad; most traders get better results";
         else if (Tdiff < 1e+3) result += "bad; consider moving to another server/network";
         else                   result += "very bad; move to another server/network";
-        log(result);
+        print(result);
+      };
+      void disclaimer() const {
+        if (!unlock.empty())
+          print("was slowdown 7 seconds (--free-version argument was implicitly set):"
+            "\n" "\n" "Your apikey: " + apikey +
+            "\n" "\n" "To unlock it anonymously and to collaborate with"
+            "\n"      "the development, make an acceptable Pull Request"
+            "\n"      "on github.. or send 0.01210000 BTC (or more) to:"
+            "\n" "\n" "  " + unlock +
+            "\n" "\n" "Before restart just wait for 0 confirmations at:"
+            "\n"      "https://live.blockcypher.com/btc/address/" + unlock +
+            "\n" "\n" "DISCLAIMER: This is strict non-violent software:"
+            "\n"      "if you hurt other living creatures, please stop;"
+            "\n"      "otherwise remove all copies of the software now."
+            "\n" "\n" "                     Signed-off-by: Carles Tubio"
+            "\n"      "see: github.com/ctubio/Krypto-trading-bot#unlock"
+            "\n"      "or just use --free-version to hide this message"
+          );
       };
       function<void(const string&, const string&, const string&)> printer;
     protected:
-      void log(const string &reason, const string &highlight = "") {
+      void print(const string &reason, const string &highlight = "") const {
         if (printer) printer(
           string(reason.find(">>>") != reason.find("<<<")
             ? "DEBUG "
@@ -385,6 +417,12 @@ namespace ₿ {
           reason,
           highlight
         );
+      };
+      void reduce(mLevels &levels) {
+        if (maxLevel and levels.bids.size() > maxLevel)
+          levels.bids.erase(levels.bids.begin() + maxLevel, levels.bids.end());
+        if (maxLevel and levels.asks.size() > maxLevel)
+          levels.asks.erase(levels.asks.begin() + maxLevel, levels.asks.end());
       };
   };
 
@@ -397,87 +435,131 @@ namespace ₿ {
 
   class GwApiREST: public Gw {
     public:
-      const bool askForData(const unsigned int &tick) override {
-        return askForSyncData(tick);
+      void askForData(const unsigned int &tick) override {
+        askForSyncData(tick);
       };
-      const bool waitForData() override {
-        return waitForSyncData();
+      void waitForData(Loop *const loop) override {
+        waitForSyncData(loop);
       };
   };
-  class GwApiWS: public Gw {
+  class GwApiWs: public Gw,
+                 public Curl::WebSocket {
     private:
-               CURL *curl   = nullptr;
-      curl_socket_t  sockfd = 0;
-             string  buffer;
-       unsigned int  countdown = 1;
-               bool  subscription = false;
+       unsigned int countdown    = 1;
+               bool subscription = false;
     public:
-      const bool askForData(const unsigned int &tick) override {
-        if (connected() and subscribed())
+      bool connected() const override {
+        return WebSocket::connected();
+      };
+      void askForData(const unsigned int &tick) override {
+        if (countdown and !--countdown)
+          connect();
+        if (subscribed())
           askForNeverAsyncData(tick);
-        return true;
       };
-      const bool waitForData() override {
-        if (subscribed()) {
-          waitForAsyncData();
-          waitForNeverAsyncData();
-        }
-        return true;
-      };
-      const bool waiting() override {
-        return sockfd
-           and !countdown;
+      void waitForData(Loop *const loop) override {
+        waitForNeverAsyncData(loop);
       };
     protected:
-      virtual void subscribe() = 0;
-      virtual void unsubscribe() = 0;
-      virtual void consume(json&) = 0;
-      void broadcast(const string &msg) {
+//BO non-free Gw library functions from build-*/local/lib/K-*.a (it just redefines all virtual gateway class members below).
+/**/  virtual void subscribe()   = 0;                                         // send subcription messages to remote server.
+/**/  virtual void consume(json) = 0;                                         // read message one by one from remote server.
+//EO non-free Gw library functions from build-*/local/lib/K-*.a (it just redefines all virtual gateway class members above).
+      virtual void connect() {
         CURLcode rc;
-        if (CURLE_OK != (rc = Curl::broadcast(curl, sockfd, msg)))
-          log(string("CURL send Error: ") + curl_easy_strerror(rc));
+        if (CURLE_OK == (rc = WebSocket::connect(ws)))
+          WebSocket::start(GwExchangeData::loopfd, [&]() {
+            waitForAsyncData();
+          });
+        else reconnect(string("CURL connect Error: ") + curl_easy_strerror(rc));
       };
-      void disconnect() {
-        Curl::cleanup(curl, sockfd);
+      void emit(const string &msg) {
+        CURLcode rc;
+        if (CURLE_OK != (rc = WebSocket::emit(msg, 0x01)))
+          print(string("CURL send Error: ") + curl_easy_strerror(rc));
+      };
+      void disconnect() override {
+        WebSocket::emit("", 0x08);
+        WebSocket::cleanup();
       };
       void reconnect(const string &reason) {
+        disconnect();
         countdown = 7;
-        log("WS " + reason + ", reconnecting in " + to_string(countdown) + "s.");
+        print("WS " + reason + ", reconnecting in " + to_string(countdown) + "s.");
+      };
+      bool accept_msg(const string &msg) {
+        const bool next = !msg.empty();
+        if (next) {
+          if (json::accept(msg))
+            consume(json::parse(msg));
+          else print("CURL Error: Unsupported data format");
+        }
+        return next;
+      };
+      bool subscribed() {
+        if (subscription != connected()) {
+          subscription = !subscription;
+          if (subscription) subscribe();
+          else {
+            online(Connectivity::Disconnected);
+            reconnect("Disconnected");
+          };
+        }
+        return subscription;
       };
     private:
       void waitForAsyncData() {
-        if (received())
-          for (;;) {
-            string msg;
-            Curl::unframe(curl, sockfd, buffer, msg);
-            if (msg.empty()) break;
-            json j = json::accept(msg)
-                   ? json::parse(msg)
-                   : (json){ {"error", "CURL Error: Unsupported frame data format"} };
-            consume(j);
-          }
-      };
-      const bool connected() {
-        if (countdown and !--countdown) {
-          CURLcode rc;
-          if (CURLE_OK != (rc = Curl::connect(curl, sockfd, buffer, ws)))
-            log(string("CURL connect Error: ") + curl_easy_strerror(rc));
-        }
-        return waiting();
-      };
-      const bool received() {
         CURLcode rc;
-        if (CURLE_OK != (rc = Curl::receive(curl, sockfd, buffer)))
-          log(string("CURL recv Error: ") + curl_easy_strerror(rc));
-        return !buffer.empty();
+        if (CURLE_OK != (rc = WebSocket::send_recv()))
+          print(string("CURL recv Error: ") + curl_easy_strerror(rc));
+        while (accept_msg(WebSocket::unframe()));
       };
-      const bool subscribed() {
-        if (subscription != waiting()) {
-          subscription = !subscription;
-          if (subscription) subscribe();
-          else unsubscribe();
+  };
+  class GwApiFix: public GwApiWs,
+                  public Curl::FixSocket {
+    protected:
+      string target;
+    public:
+      GwApiFix()
+        : FixSocket(apikey, target)
+      {};
+      bool connected() const override {
+        return WebSocket::connected()
+           and FixSocket::connected();
+      };
+    protected:
+//BO non-free Gw library functions from build-*/local/lib/K-*.a (it just redefines all virtual gateway class members below).
+/**/  virtual string logon() = 0;                                                                   // return logon message.
+//EO non-free Gw library functions from build-*/local/lib/K-*.a (it just redefines all virtual gateway class members above).
+      void connect() override {
+        GwApiWs::connect();
+        if (WebSocket::connected()) {
+          CURLcode rc;
+          if (CURLE_OK == (rc = FixSocket::connect(fix, logon()))) {
+            FixSocket::start(GwExchangeData::loopfd, [&]() {
+              waitForAsyncData();
+            });
+            print("FIX success Logon, streaming orders");
+          } else reconnect(string("CURL connect FIX Error: ") + curl_easy_strerror(rc));
         }
-        return subscription;
+      };
+      void disconnect() override {
+        if (FixSocket::connected()) print("FIX Logout");
+        FixSocket::emit("", "5");
+        FixSocket::cleanup();
+        GwApiWs::disconnect();
+      };
+      void beam(const string &msg, const string &type) {
+        CURLcode rc;
+        if (CURLE_OK != (rc = FixSocket::emit(msg, type)))
+          print(string("CURL send FIX Error: ") + curl_easy_strerror(rc));
+      };
+    private:
+      void waitForAsyncData() {
+        CURLcode rc;
+        if (CURLE_OK != (rc = FixSocket::send_recv()))
+          print(string("CURL recv FIX Error: ") + curl_easy_strerror(rc));
+        while (accept_msg(FixSocket::unframe()));
       };
   };
 
@@ -488,15 +570,18 @@ namespace ₿ {
         randId = Random::uuid36Id;
       };
     public:
-      const json handshake() override {
+      json handshake() override {
         return {
-          {"minTick", 1e-2   },
-          {"minSize", 1e-2   },
-          {  "reply", nullptr}
+          {     "base", base   },
+          {    "quote", quote  },
+          {"tickPrice", 1e-2   },
+          { "tickSize", 1e-2   },
+          {  "minSize", 1e-2   },
+          {    "reply", nullptr}
         };
       };
   };
-  class GwHitBtc: public GwApiWS {
+  class GwHitBtc: public GwApiWs {
     public:
       GwHitBtc()
       {
@@ -504,19 +589,24 @@ namespace ₿ {
         ws     = "wss://api.hitbtc.com/api/2/ws";
         randId = Random::uuid32Id;
       };
-      const json handshake() override {
-        const json reply = Curl::xfer(http + "/public/symbol/" + base + quote);
+      json handshake() override {
+        symbol = base + quote;
+        const json reply = Curl::Web::xfer(http + "/public/symbol/" + symbol);
         return {
-          {"minTick", stod(reply.value("tickSize", "0"))            },
-          {"minSize", stod(reply.value("quantityIncrement", "0"))   },
-          {"makeFee", stod(reply.value("provideLiquidityRate", "0"))},
-          {"takeFee", stod(reply.value("takeLiquidityRate", "0"))   },
-          {  "reply", reply                                         }
+          {     "base", base == "USDT" ? "USD" : base                 },
+          {    "quote", quote == "USDT" ? "USD" : quote               },
+          {   "symbol", symbol                                        },
+          {"tickPrice", stod(reply.value("tickSize", "0"))            },
+          { "tickSize", stod(reply.value("quantityIncrement", "0"))   },
+          {  "minSize", stod(reply.value("quantityIncrement", "0"))   },
+          {  "makeFee", stod(reply.value("provideLiquidityRate", "0"))},
+          {  "takeFee", stod(reply.value("takeLiquidityRate", "0"))   },
+          {    "reply", reply                                         }
         };
       };
     protected:
-      static const json xfer(const string &url, const string &auth, const string &post) {
-        return Curl::request(url, [&](CURL *curl) {
+      static json xfer(const string &url, const string &auth, const string &post) {
+        return Curl::Web::request(url, [&](CURL *curl) {
           curl_easy_setopt(curl, CURLOPT_USERPWD, auth.data());
           curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
           curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post.data());
@@ -531,38 +621,42 @@ namespace ₿ {
         ws   = "wss://api.bequant.io/api/2/ws";
       };
   };
-  class GwCoinbase: public GwApiWS,
-                    public FIX::NullApplication {
+  class GwCoinbase: public GwApiFix {
     public:
       GwCoinbase()
       {
         http   = "https://api.pro.coinbase.com";
         ws     = "wss://ws-feed.pro.coinbase.com";
         fix    = "fix.pro.coinbase.com:4198";
+        target = "Coinbase";
         randId = Random::uuid36Id;
       };
-      const json handshake() override {
-        const json reply = Curl::xfer(http + "/products/" + base + "-" + quote);
+      json handshake() override {
+        symbol = base + "-" + quote;
+        const json reply = Curl::Web::xfer(http + "/products/" + symbol);
         return {
-          {"minTick", stod(reply.value("quote_increment", "0"))},
-          {"minSize", stod(reply.value("base_min_size", "0"))  },
-          {  "reply", reply                                    }
+          {     "base", base                                     },
+          {    "quote", quote                                    },
+          {   "symbol", symbol                                   },
+          {"tickPrice", stod(reply.value("quote_increment", "0"))},
+          { "tickSize", stod(reply.value("base_increment", "0")) },
+          {  "minSize", stod(reply.value("base_min_size", "0"))  },
+          {    "reply", reply                                    }
         };
       };
     protected:
-      static const json xfer(const string &url, const string &h1, const string &h2, const string &h3, const string &h4, const bool &rm) {
-        return Curl::request(url, [&](CURL *curl) {
+      static json xfer(const string &url, const string &h1, const string &h2, const string &h3, const string &h4) {
+        return Curl::Web::request(url, [&](CURL *curl) {
           struct curl_slist *h_ = nullptr;
           h_ = curl_slist_append(h_, ("CB-ACCESS-KEY: " + h1).data());
           h_ = curl_slist_append(h_, ("CB-ACCESS-SIGN: " + h2).data());
           h_ = curl_slist_append(h_, ("CB-ACCESS-TIMESTAMP: " + h3).data());
           h_ = curl_slist_append(h_, ("CB-ACCESS-PASSPHRASE: " + h4).data());
           curl_easy_setopt(curl, CURLOPT_HTTPHEADER, h_);
-          if (rm) curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
         });
       };
   };
-  class GwBitfinex: public GwApiWS {
+  class GwBitfinex: public GwApiWs {
     public:
       GwBitfinex()
       {
@@ -571,10 +665,11 @@ namespace ₿ {
         randId = Random::int45Id;
         askForReplace = true;
       };
-      const json handshake() override {
-        const json reply1 = Curl::xfer(http + "/pubticker/" + base + quote);
-        Price minTick = 0,
-              minSize = 0;
+      json handshake() override {
+        symbol = base + quote;
+        const json reply1 = Curl::Web::xfer(http + "/pubticker/" + symbol);
+        Price tickPrice = 0,
+              minSize   = 0;
         if (reply1.find("last_price") != reply1.end()) {
           ostringstream price_;
           price_ << scientific << stod(reply1.value("last_price", "0"));
@@ -583,24 +678,30 @@ namespace ₿ {
             if (*it == '+' or *it == '-') break;
             else it = price.erase(it);
           istringstream iss("1e" + to_string(fmax(stod(price),-4)-4));
-          iss >> minTick;
+          iss >> tickPrice;
         }
-        const json reply2 = Curl::xfer(http + "/symbols_details");
+        const json reply2 = Curl::Web::xfer(http + "/symbols_details");
         if (reply2.is_array())
           for (const json &it : reply2)
-            if (it.find("pair") != it.end() and it.value("pair", "") == Text::strL(base + quote)) {
+            if (it.find("pair") != it.end() and it.value("pair", "") == Text::strL(symbol)) {
               minSize = stod(it.value("minimum_order_size", "0"));
               break;
             }
         return {
-          {"minTick", minTick         },
-          {"minSize", minSize         },
-          {  "reply", {reply1, reply2}}
+          {     "base", base            },
+          {    "quote", quote           },
+          {   "symbol", symbol          },
+          {"tickPrice", tickPrice       },
+          { "tickSize", tickPrice < 1e-8
+                         ? 1e-10
+                         : 1e-8         },
+          {  "minSize", minSize         },
+          {    "reply", {reply1, reply2}}
         };
       };
     protected:
-      static const json xfer(const string &url, const string &post, const string &h1, const string &h2) {
-        return Curl::request(url, [&](CURL *curl) {
+      static json xfer(const string &url, const string &post, const string &h1, const string &h2) {
+        return Curl::Web::request(url, [&](CURL *curl) {
           struct curl_slist *h_ = nullptr;
           h_ = curl_slist_append(h_, ("X-BFX-APIKEY: " + h1).data());
           h_ = curl_slist_append(h_, ("X-BFX-PAYLOAD: " + post).data());
@@ -618,7 +719,7 @@ namespace ₿ {
         ws   = "wss://api.ethfinex.com/ws/2";
       };
   };
-  class GwFCoin: public GwApiWS {
+  class GwFCoin: public GwApiWs {
     public:
       GwFCoin()
       {
@@ -626,29 +727,34 @@ namespace ₿ {
         ws     = "wss://api.fcoin.com/v2/ws";
         randId = Random::char16Id;
       };
-      const json handshake() override {
-        const json reply = Curl::xfer(http + "public/symbols");
-        Price minTick = 0,
-              minSize = 0;
+      json handshake() override {
+        symbol = base + quote;
+        const json reply = Curl::Web::xfer(http + "public/symbols");
+        Price  tickPrice = 0;
+        Amount tickSize  = 0;
         if (reply.find("data") != reply.end() and reply.at("data").is_array())
           for (const json &it : reply.at("data"))
-            if (it.find("name") != it.end() and it.value("name", "") == Text::strL(base + quote)) {
+            if (it.find("name") != it.end() and it.value("name", "") == Text::strL(symbol)) {
               istringstream iss(
                 "1e-" + to_string(it.value("price_decimal", 0))
                 + " 1e-" + to_string(it.value("amount_decimal", 0))
               );
-              iss >> minTick >> minSize;
+              iss >> tickPrice >> tickSize;
               break;
             }
         return {
-          {"minTick", minTick},
-          {"minSize", minSize},
-          {  "reply", reply  }
+          {     "base", base     },
+          {    "quote", quote    },
+          {   "symbol", symbol   },
+          {"tickPrice", tickPrice},
+          { "tickSize", tickSize },
+          {  "minSize", tickSize },
+          {    "reply", reply    }
         };
       };
     protected:
-      static const json xfer(const string &url, const string &h1, const string &h2, const string &h3, const string &post = "") {
-        return Curl::request(url, [&](CURL *curl) {
+      static json xfer(const string &url, const string &h1, const string &h2, const string &h3, const string &post = "") {
+        return Curl::Web::request(url, [&](CURL *curl) {
           struct curl_slist *h_ = nullptr;
           if (!post.empty()) {
             curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post.data());
@@ -668,10 +774,10 @@ namespace ₿ {
         http   = "https://api.kraken.com";
         randId = Random::int32Id;
       };
-      const json handshake() override {
-        const json reply = Curl::xfer(http + "/0/public/AssetPairs?pair=" + base + quote);
-        Price minTick = 0,
-              minSize = 0;
+      json handshake() override {
+        const json reply = Curl::Web::xfer(http + "/0/public/AssetPairs?pair=" + base + quote);
+        Price tickPrice = 0,
+              minSize   = 0;
         if (reply.find("result") != reply.end())
           for (json::const_iterator it = reply.at("result").cbegin(); it != reply.at("result").cend(); ++it)
             if (it.value().find("pair_decimals") != it.value().end()) {
@@ -679,18 +785,27 @@ namespace ₿ {
                 "1e-" + to_string(it.value().value("pair_decimals", 0))
                 + " 1e-" + to_string(it.value().value("lot_decimals", 0))
               );
-              iss >> minTick >> minSize;
+              iss >> tickPrice >> minSize;
+              base   = it.value().value("base", base);
+              quote  = it.value().value("quote", quote);
+              symbol = base + quote;
               break;
             }
         return {
-          {"minTick", minTick},
-          {"minSize", minSize},
-          {  "reply", reply  }
+          {     "base", base            },
+          {    "quote", quote           },
+          {   "symbol", symbol          },
+          {"tickPrice", tickPrice       },
+          { "tickSize", tickPrice < 1e-8
+                         ? 1e-10
+                         : 1e-8         },
+          {  "minSize", minSize         },
+          {    "reply", reply           }
         };
       };
     protected:
-      static const json xfer(const string &url, const string &h1, const string &h2, const string &post) {
-        return Curl::request(url, [&](CURL *curl) {
+      static json xfer(const string &url, const string &h1, const string &h2, const string &post) {
+        return Curl::Web::request(url, [&](CURL *curl) {
           struct curl_slist *h_ = nullptr;
           h_ = curl_slist_append(h_, ("API-Key: " + h1).data());
           h_ = curl_slist_append(h_, ("API-Sign: " + h2).data());
@@ -706,20 +821,28 @@ namespace ₿ {
         http   = "https://poloniex.com";
         randId = Random::int45Id;
       };
-      const json handshake() override {
-        const json reply = Curl::xfer(http + "/public?command=returnTicker")
-                             .value(quote + "_" + base, json::object());
+      json handshake() override {
+        symbol = quote + "_" + base;
+        const json reply = Curl::Web::xfer(http + "/public?command=returnTicker")
+                             .value(symbol, json::object());
+        const Price tickPrice = reply.empty()
+                                  ? 0
+                                  : 1e-8;
         return {
-          {"minTick", reply.empty()
-                        ? 0
-                        : 1e-8     },
-          {"minSize", 1e-3         },
-          {  "reply", reply        }
+          {     "base", base            },
+          {    "quote", quote           },
+          {   "symbol", symbol          },
+          {"tickPrice", tickPrice       },
+          { "tickSize", tickPrice < 1e-8
+                          ? 1e-10
+                          : 1e-8        },
+          {  "minSize", 1e-3            },
+          {    "reply", reply           }
         };
       };
     protected:
-      static const json xfer(const string &url, const string &post, const string &h1, const string &h2) {
-        return Curl::request(url, [&](CURL *curl) {
+      static json xfer(const string &url, const string &post, const string &h1, const string &h2) {
+        return Curl::Web::request(url, [&](CURL *curl) {
           struct curl_slist *h_ = nullptr;
           h_ = curl_slist_append(h_, "Content-Type: application/x-www-form-urlencoded");
           h_ = curl_slist_append(h_, ("Key: " + h1).data());
