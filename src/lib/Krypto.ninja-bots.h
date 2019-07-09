@@ -440,8 +440,9 @@ namespace ₿ {
           {"secret",       "WORD",   "NULL",   "set (never share!) WORD as api secret for trading, mandatory"},
           {"passphrase",   "WORD",   "NULL",   "set (never share!) WORD as api passphrase for trading,"
                                                "\n" "mandatory but may be 'NULL'"},
-          {"maker-fee",    "AMOUNT", "0",      "set percentage of custom maker fee, like '0.1'"},
-          {"taker-fee",    "AMOUNT", "0",      "set percentage of custom taker fee, like '0.1'"},
+          {"maker-fee",    "AMOUNT", "0",      "set custom percentage of maker fee, like '0.1'"},
+          {"taker-fee",    "AMOUNT", "0",      "set custom percentage of taker fee, like '0.1'"},
+          {"min-size",     "AMOUNT", "0",      "set custom minimum order size, like '0.01'"},
           {"http",         "URL",    "",       "set URL of alernative HTTPS api endpoint for trading"},
           {"wss",          "URL",    "",       "set URL of alernative WSS api endpoint for trading"},
           {"fix",          "URL",    "",       "set URL of alernative FIX api endpoint for trading"},
@@ -511,16 +512,28 @@ namespace ₿ {
         }
         if (arg<int>("naked"))
           Print::display = nullptr;
-        curl_global_init(CURL_GLOBAL_ALL);
-        Curl::global_setopt = [&](CURL *curl) {
-          curl_easy_setopt(curl, CURLOPT_USERAGENT, "K");
-          if (!arg<string>("interface").empty())
-            curl_easy_setopt(curl, CURLOPT_INTERFACE, arg<string>("interface").data());
-          if (!arg<int>("ipv6"))
-            curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-        };
+        curl_setopt();
       };
     private:
+      void curl_setopt() {
+        curl_global_init(CURL_GLOBAL_ALL);
+        if (!arg<string>("interface").empty() and !arg<int>("ipv6"))
+          Curl::global_setopt = [&](CURL *curl) {
+            curl_easy_setopt(curl, CURLOPT_USERAGENT, "K");
+            curl_easy_setopt(curl, CURLOPT_INTERFACE, arg<string>("interface").data());
+            curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+          };
+        else if (!arg<string>("interface").empty())
+          Curl::global_setopt = [&](CURL *curl) {
+            curl_easy_setopt(curl, CURLOPT_USERAGENT, "K");
+            curl_easy_setopt(curl, CURLOPT_INTERFACE, arg<string>("interface").data());
+          };
+        else if (!arg<int>("ipv6"))
+          Curl::global_setopt = [&](CURL *curl) {
+            curl_easy_setopt(curl, CURLOPT_USERAGENT, "K");
+            curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+          };
+      };
       void tidy() {
         if (arg<string>("currency").find("/") == string::npos or arg<string>("currency").length() < 3)
           error("CF", "Invalid --currency value; must be in the format of BASE/QUOTE, like BTC/EUR");
@@ -1530,6 +1543,8 @@ namespace ₿ {
           gateway->takeFee = arg<double>("taker-fee") / 1e+2;
         if (arg<double>("maker-fee"))
           gateway->makeFee = arg<double>("maker-fee") / 1e+2;
+        if (arg<double>("min-size"))
+          gateway->minSize = arg<double>("min-size");
         gateway->apikey    = arg<string>("apikey");
         gateway->secret    = arg<string>("secret");
         gateway->pass      = arg<string>("passphrase");

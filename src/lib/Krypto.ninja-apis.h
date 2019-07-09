@@ -155,7 +155,7 @@ namespace ₿ {
       static const json xfer(const string &url, const long &timeout = 13) {
         return perform(url, [&](CURL *curl) {
           curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);
-        }, timeout == 13);
+        });
       };
       static const json xfer(const string &url, const string &post) {
         return perform(url, [&](CURL *curl) {
@@ -165,7 +165,7 @@ namespace ₿ {
           curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post.data());
         });
       };
-      static const json perform(const string &url, const function<void(CURL*)> custom_setopt, const bool debug = true) {
+      static const json perform(const string &url, const function<void(CURL*)> custom_setopt) {
         static mutex waiting_reply;
         lock_guard<mutex> lock(waiting_reply);
         string reply;
@@ -180,12 +180,14 @@ namespace ₿ {
           res = curl_easy_perform(curl);
           curl_easy_cleanup(curl);
         }
-        return (debug and res != CURLE_OK)
-          ? (json){ {"error", string("CURL Error: ") + curl_easy_strerror(res)} }
-          : (json::accept(reply)
+        return res == CURLE_OK
+          ? (json::accept(reply)
               ? json::parse(reply)
               : json::object()
-            );
+            )
+          : (json){
+              {"error", string("CURL Error: ") + curl_easy_strerror(res)}
+            };
       };
     private:
       static size_t write(void *buf, size_t size, size_t nmemb, void *reply) {
@@ -357,6 +359,10 @@ namespace ₿ {
             const double points = pow(10, -1 * stream.precision());
             return ::round(input / points) * points;
           };
+          const double floor(const double &input) const {
+            const double points = pow(10, -1 * stream.precision());
+            return ::floor(input / points) * points;
+          };
           const string str(const double &input) {
             stream.str("");
             stream << round(input);
@@ -510,7 +516,7 @@ namespace ₿ {
         } else
           reply = handshake();
         minTick = reply.value("minTick", 0.0);
-        minSize = reply.value("minSize", 0.0);
+        if (!minSize) minSize = reply.value("minSize", 0.0);
         if (!makeFee) makeFee = reply.value("makeFee", 0.0);
         if (!takeFee) takeFee = reply.value("takeFee", 0.0);
         if (!file.is_open() and minTick and minSize) {
