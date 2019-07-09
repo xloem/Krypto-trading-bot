@@ -1,7 +1,7 @@
 #ifndef K_APIS_H_
 #define K_APIS_H_
 //! \file
-//! \brief External exchange API integrations.
+//! \brief Exchange API integrations.
 
 namespace ₿ {
   enum class Connectivity: unsigned int { Disconnected, Connected };
@@ -149,202 +149,6 @@ namespace ₿ {
     k.disablePostOnly = true;
   };
 
-  class Curl {
-    public:
-      static function<void(CURL*)> global_setopt;
-      static const json xfer(const string &url, const long &timeout = 13) {
-        return perform(url, [&](CURL *curl) {
-          curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);
-        });
-      };
-      static const json xfer(const string &url, const string &post) {
-        return perform(url, [&](CURL *curl) {
-          struct curl_slist *h_ = nullptr;
-          h_ = curl_slist_append(h_, "Content-Type: application/x-www-form-urlencoded");
-          curl_easy_setopt(curl, CURLOPT_HTTPHEADER, h_);
-          curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post.data());
-        });
-      };
-      static const json perform(const string &url, const function<void(CURL*)> custom_setopt) {
-        static mutex waiting_reply;
-        lock_guard<mutex> lock(waiting_reply);
-        string reply;
-        CURLcode res = CURLE_FAILED_INIT;
-        CURL *curl = curl_easy_init();
-        if (curl) {
-          custom_setopt(curl);
-          global_setopt(curl);
-          curl_easy_setopt(curl, CURLOPT_URL, url.data());
-          curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, &write);
-          curl_easy_setopt(curl, CURLOPT_WRITEDATA, &reply);
-          res = curl_easy_perform(curl);
-          curl_easy_cleanup(curl);
-        }
-        return res == CURLE_OK
-          ? (json::accept(reply)
-              ? json::parse(reply)
-              : json::object()
-            )
-          : (json){
-              {"error", string("CURL Error: ") + curl_easy_strerror(res)}
-            };
-      };
-    private:
-      static size_t write(void *buf, size_t size, size_t nmemb, void *reply) {
-        ((string*)reply)->append((char*)buf, size *= nmemb);
-        return size;
-      };
-  };
-
-  class Text {
-    public:
-      static string strL(string input) {
-        transform(input.begin(), input.end(), input.begin(), ::tolower);
-        return input;
-      };
-      static string strU(string input) {
-        transform(input.begin(), input.end(), input.begin(), ::toupper);
-        return input;
-      };
-      static string B64(const string &input) {
-        BIO *bio, *b64;
-        BUF_MEM *bufferPtr;
-        b64 = BIO_new(BIO_f_base64());
-        bio = BIO_new(BIO_s_mem());
-        bio = BIO_push(b64, bio);
-        BIO_set_close(bio, BIO_CLOSE);
-        BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
-        BIO_write(bio, input.data(), input.length());
-        BIO_flush(bio);
-        BIO_get_mem_ptr(bio, &bufferPtr);
-        const string output(bufferPtr->data, bufferPtr->length);
-        BIO_free_all(bio);
-        return output;
-      };
-      static string B64_decode(const string &input) {
-        BIO *bio, *b64;
-        char output[input.length()];
-        b64 = BIO_new(BIO_f_base64());
-        bio = BIO_new_mem_buf(input.data(), input.length());
-        bio = BIO_push(b64, bio);
-        BIO_set_close(bio, BIO_CLOSE);
-        BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
-        int len = BIO_read(bio, output, input.length());
-        BIO_free_all(bio);
-        return string(output, len);
-      };
-      static string SHA256(const string &input, const bool &hex = false) {
-        return SHA(input, hex, ::SHA256, SHA256_DIGEST_LENGTH);
-      };
-      static string SHA512(const string &input) {
-        return SHA(input, false, ::SHA512, SHA512_DIGEST_LENGTH);
-      };
-      static string HMAC1(const string &key, const string &input, const bool &hex = false) {
-        return HMAC(key, input, hex, EVP_sha1, SHA_DIGEST_LENGTH);
-      };
-      static string HMAC256(const string &key, const string &input, const bool &hex = false) {
-        return HMAC(key, input, hex, EVP_sha256, SHA256_DIGEST_LENGTH);
-      };
-      static string HMAC512(const string &key, const string &input, const bool &hex = false) {
-        return HMAC(key, input, hex, EVP_sha512, SHA512_DIGEST_LENGTH);
-      };
-      static string HMAC384(const string &key, const string &input, const bool &hex = false) {
-        return HMAC(key, input, hex, EVP_sha384, SHA384_DIGEST_LENGTH);
-      };
-    private:
-      static string SHA(
-        const string  &input,
-        const bool    &hex,
-        unsigned char *(*md)(const unsigned char*, size_t, unsigned char*),
-        const int     &digest_len
-      ) {
-        unsigned char digest[digest_len];
-        md((unsigned char*)input.data(), input.length(), (unsigned char*)&digest);
-        char output[digest_len * 2 + 1];
-        for (unsigned int i = 0; i < digest_len; i++)
-          sprintf(&output[i * 2], "%02x", (unsigned int)digest[i]);
-        return hex ? HEX(output) : output;
-      };
-      static string HMAC(
-        const string &key,
-        const string &input,
-        const bool   &hex,
-        const EVP_MD *(evp_md)(),
-        const int    &digest_len
-      ) {
-        unsigned char* digest;
-        digest = ::HMAC(
-          evp_md(),
-          input.data(), input.length(),
-          (unsigned char*)key.data(), key.length(),
-          nullptr, nullptr
-        );
-        char output[digest_len * 2 + 1];
-        for (unsigned int i = 0; i < digest_len; i++)
-          sprintf(&output[i * 2], "%02x", (unsigned int)digest[i]);
-        return hex ? HEX(output) : output;
-      };
-      static string HEX(const string &input) {
-        const unsigned int len = input.length();
-        string output;
-        for (unsigned int i = 0; i < len; i += 2)
-          output.push_back(
-            (char)(int)strtol(input.substr(i, 2).data(), nullptr, 16)
-          );
-        return output;
-      };
-  };
-
-  class Random {
-    public:
-      static const unsigned long long int64() {
-        static random_device rd;
-        static mt19937_64 gen(rd());
-        return uniform_int_distribution<unsigned long long>()(gen);
-      };
-      static const RandId int45Id() {
-        return to_string(int64()).substr(0, 10);
-      };
-      static const RandId int32Id() {
-        return to_string(int64()).substr(0,  8);
-      };
-      static const RandId char16Id() {
-        string id = string(16, ' ');
-        for (auto &it : id) {
-         const int offset = int64() % (26 + 26 + 10);
-         if (offset < 26)           it = 'a' + offset;
-         else if (offset < 26 + 26) it = 'A' + offset - 26;
-         else                       it = '0' + offset - 26 - 26;
-        }
-        return id;
-      };
-      static const RandId uuid36Id() {
-        string uuid = string(36, ' ');
-        uuid[8]  =
-        uuid[13] =
-        uuid[18] =
-        uuid[23] = '-';
-        uuid[14] = '4';
-        unsigned long long rnd = int64();
-        for (auto &it : uuid)
-          if (it == ' ') {
-            if (rnd <= 0x02) rnd = 0x2000000 + (int64() * 0x1000000) | 0;
-            rnd >>= 4;
-            const int offset = (uuid[17] != ' ' and uuid[19] == ' ')
-              ? ((rnd & 0xf) & 0x3) | 0x8
-              : rnd & 0xf;
-            if (offset < 10) it = '0' + offset;
-            else             it = 'a' + offset - 10;
-          }
-        return uuid;
-      };
-      static const RandId uuid32Id() {
-        RandId uuid = uuid36Id();
-        uuid.erase(remove(uuid.begin(), uuid.end(), '-'), uuid.end());
-        return uuid;
-      }
-  };
-
   class GwExchangeData {
     public_friend:
       class Decimal {
@@ -375,7 +179,7 @@ namespace ₿ {
                 amount,
                 percent;
       } decimal;
-      uWS::Group<uWS::CLIENT> *api = nullptr;
+      curl_socket_t loopfd = 0;
       function<void(const mOrder&)>       write_mOrder;
       function<void(const mTrade&)>       write_mTrade;
       function<void(const mLevels&)>      write_mLevels;
@@ -385,8 +189,8 @@ namespace ₿ {
            askForReplace   = false,
            askForCancelAll = false;
       const RandId (*randId)() = nullptr;
-      virtual const bool askForData(const unsigned int &tick) = 0;
-      virtual const bool waitForData() = 0;
+      virtual void askForData(const unsigned int &tick) = 0;
+      virtual void waitForData(Loop *const loop) = 0;
       void place(const mOrder *const order) {
         place(
           order->orderId,
@@ -411,91 +215,98 @@ namespace ₿ {
         );
       };
 //BO non-free Gw library functions from build-*/local/lib/K-*.a (it just redefines all virtual gateway class members below).
-/**/  virtual bool ready(uS::Loop *const) = 0;                               // wait for exchange and register data handlers
+/**/  virtual bool   ready() = 0;                                            // wait for exchange and register data handlers
 /**/  virtual void replace(RandId, string) {};                               // call         async orders data from exchange
-/**/  virtual void place(RandId, Side, string, string, OrderType, TimeInForce, bool) = 0, // async orders like above / below
-/**/               cancel(RandId, RandId) = 0,                               // call         async orders data from exchange
-/**/               close() = 0;                                              // disconnect but without waiting for reconnect
+/**/  virtual void   place(RandId, Side, string, string, OrderType, TimeInForce, bool) = 0; // async orders like above/below
+/**/  virtual void  cancel(RandId, RandId) = 0;                              // call         async orders data from exchange
 /**/protected:
-/**/  virtual bool            async_wallet() { return false; };              // call         async wallet data from exchange
-/**/  virtual vector<mWallets> sync_wallet() { return {}; };                 // call and read sync wallet data from exchange
-/**/  virtual vector<mLevels>  sync_levels() { return {}; };                 // call and read sync levels data from exchange
-/**/  virtual vector<mTrade>   sync_trades() { return {}; };                 // call and read sync trades data from exchange
-/**/  virtual vector<mOrder>   sync_orders() { return {}; };                 // call and read sync orders data from exchange
-/**/  virtual vector<mOrder>   sync_cancelAll() = 0;                         // call and read sync orders data from exchange
+/**/  virtual             bool async_wallet()    { return false; };          // call         async wallet data from exchange
+/**/  virtual             bool async_cancelAll() { return false; };          // call         async orders data from exchange
+/**/  virtual vector<mWallets>  sync_wallet()    { return {}; };             // call and read sync wallet data from exchange
+/**/  virtual  vector<mLevels>  sync_levels()    { return {}; };             // call and read sync levels data from exchange
+/**/  virtual   vector<mTrade>  sync_trades()    { return {}; };             // call and read sync trades data from exchange
+/**/  virtual   vector<mOrder>  sync_orders()    { return {}; };             // call and read sync orders data from exchange
+/**/  virtual   vector<mOrder>  sync_cancelAll() { return {}; };             // call and read sync orders data from exchange
 //EO non-free Gw library functions from build-*/local/lib/K-*.a (it just redefines all virtual gateway class members above).
+      void online(const Connectivity &connectivity = Connectivity::Connected) {
+        if (write_Connectivity)
+          write_Connectivity(connectivity);
+      };
+      void askForNeverAsyncData(const unsigned int &tick) {
+        if (((askForFees and !(askForFees = false))
+          or !(tick % 15))
+          and !async_wallet())    askFor(replyWallets,   eventWallets,   [&]() { return sync_wallet(); });
+        if ((askForCancelAll
+          and !(tick % 300))
+          and !async_cancelAll()) askFor(replyCancelAll, eventCancelAll, [&]() { return sync_cancelAll(); });
+      };
+      void askForSyncData(const unsigned int &tick) {
+        if (!(tick % 2))          askFor(replyOrders,    eventOrders,    [&]() { return sync_orders(); });
+                                  askForNeverAsyncData(tick);
+        if (!(tick % 3))          askFor(replyLevels,    eventLevels,    [&]() { return sync_levels(); });
+        if (!(tick % 60))         askFor(replyTrades,    eventTrades,    [&]() { return sync_trades(); });
+      };
+      void waitForNeverAsyncData(Loop *const loop) {
+        eventWallets   = loop->async([&]() { waitFor(replyWallets,   write_mWallets); });
+        eventCancelAll = loop->async([&]() { waitFor(replyCancelAll, write_mOrder); });
+      };
+      void waitForSyncData(Loop *const loop) {
+        eventOrders    = loop->async([&]() { waitFor(replyOrders,    write_mOrder); });
+        waitForNeverAsyncData(loop);
+        eventLevels    = loop->async([&]() { waitFor(replyLevels,    write_mLevels); });
+        eventTrades    = loop->async([&]() { waitFor(replyTrades,    write_mTrade); });
+      };
+    private:
+      Loop::Async* eventWallets   = nullptr;
+      Loop::Async* eventLevels    = nullptr;
+      Loop::Async* eventTrades    = nullptr;
+      Loop::Async* eventOrders    = nullptr;
+      Loop::Async* eventCancelAll = nullptr;
       future<vector<mWallets>> replyWallets;
-      future<vector<mLevels>> replyLevels;
-      future<vector<mTrade>> replyTrades;
-      future<vector<mOrder>> replyOrders;
-      future<vector<mOrder>> replyCancelAll;
-      const bool askForNeverAsyncData(const unsigned int &tick) {
-        bool waiting = false;
-        if ((askForFees
-          and !(askForFees = false)
-          ) or !(tick % 15)) waiting |= !(async_wallet() or !askFor(replyWallets, [&]() { return sync_wallet(); }));
-        if (askForCancelAll
-          and !(tick % 300)) waiting |= askFor(replyCancelAll, [&]() { return sync_cancelAll(); });
-        return waiting;
-      };
-      const bool askForSyncData(const unsigned int &tick) {
-        bool waiting = false;
-        if (!(tick % 2))     waiting |= askFor(replyOrders, [&]() { return sync_orders(); });
-                             waiting |= askForNeverAsyncData(tick);
-        if (!(tick % 3))     waiting |= askFor(replyLevels, [&]() { return sync_levels(); });
-        if (!(tick % 60))    waiting |= askFor(replyTrades, [&]() { return sync_trades(); });
-        return waiting;
-      };
-      const bool waitForNeverAsyncData() {
-        return waitFor(replyWallets,   write_mWallets)
-             | waitFor(replyCancelAll, write_mOrder);
-      };
-      const bool waitForSyncData() {
-        return waitFor(replyOrders,    write_mOrder)
-             | waitForNeverAsyncData()
-             | waitFor(replyLevels,    write_mLevels)
-             | waitFor(replyTrades,    write_mTrade);
-      };
-      template<typename T1, typename T2> const bool askFor(
+      future<vector<mLevels>>  replyLevels;
+      future<vector<mTrade>>   replyTrades;
+      future<vector<mOrder>>   replyOrders,
+                               replyCancelAll;
+      template<typename T1, typename T2> void askFor(
               future<vector<T1>> &reply,
-        const T2                 &read
+                     Loop::Async *event,
+        const                 T2 &read
       ) {
-        bool waiting = reply.valid();
-        if (!waiting) {
-          reply = ::async(launch::async, read);
-          waiting = true;
-        }
-        return waiting;
+        if (!reply.valid())
+          reply = ::async(launch::async, [this, event, read]() {
+            vector<T1> data = read();
+            event->wakeup();
+            return data;
+          });
       };
-      template<typename T> const unsigned int waitFor(
-              future<vector<T>>        &reply,
+      template<typename T> void waitFor(
+                     future<vector<T>> &reply,
         const function<void(const T&)> &write
       ) {
-        bool waiting = reply.valid();
-        if (waiting and reply.wait_for(chrono::nanoseconds(0)) == future_status::ready) {
+        if (reply.valid())
           for (T &it : reply.get()) write(it);
-          waiting = false;
-        }
-        return waiting;
       };
   };
 
   class GwExchange: public GwExchangeData {
     public:
       using Report = vector<pair<string, string>>;
-      unsigned int countdown = 0;
-        string exchange, apikey,
-               secret,   pass,
-               http,     ws,
-               fix,      unlock;
-        CoinId base,     quote;
-           int version  = 0,
-               maxLevel = 0,
-               debug    = 0;
-         Price minTick  = 0;
-        Amount minSize  = 0,
-               makeFee  = 0,
-               takeFee  = 0;
+      string exchange, apikey,
+             secret,   pass,
+             http,     ws,
+             fix,      unlock,
+             symbol;
+      CoinId base,     quote;
+         int version   = 0,
+             maxLevel  = 0,
+             debug     = 0;
+       Price tickPrice = 0;
+      Amount tickSize  = 0,
+             minSize   = 0,
+             makeFee   = 0,
+             takeFee   = 0;
+      virtual void disconnect() {};
+      virtual const bool connected() const { return true; };
       virtual const json handshake() = 0;
       const json handshake(const bool &nocache) {
         json reply;
@@ -515,11 +326,18 @@ namespace ₿ {
           reply = json::parse(file);
         } else
           reply = handshake();
-        minTick = reply.value("minTick", 0.0);
+        base = reply.value("base", base);
+        quote = reply.value("quote", quote);
+        symbol = reply.value("symbol", symbol);
+        tickPrice = reply.value("tickPrice", 0.0);
+        tickSize = reply.value("tickSize", 0.0);
         if (!minSize) minSize = reply.value("minSize", 0.0);
         if (!makeFee) makeFee = reply.value("makeFee", 0.0);
         if (!takeFee) takeFee = reply.value("takeFee", 0.0);
-        if (!file.is_open() and minTick and minSize) {
+        if (!file.is_open()
+          and tickPrice and tickSize and minSize
+          and !base.empty() and !quote.empty()
+        ) {
           file.open(cache, fstream::out | fstream::trunc);
           file << reply.dump();
         }
@@ -528,51 +346,54 @@ namespace ₿ {
       };
       void end(const bool &dustybot = false) {
         if (dustybot)
-          log("--dustybot is enabled, remember to cancel manually any open order.");
+          print("--dustybot is enabled, remember to cancel manually any open order.");
         else if (write_mOrder) {
-          log("Attempting to cancel all open orders, please wait.");
+          print("Attempting to cancel all open orders, please wait.");
           for (mOrder &it : sync_cancelAll()) write_mOrder(it);
-          log("cancel all open orders OK");
+          print("cancel all open orders OK");
         }
-        close();
-        api->close();
+        online(Connectivity::Disconnected);
+        disconnect();
       };
       void report(Report notes, const bool &nocache) {
-        decimal.price.stream.precision(abs(log10(minTick)));
-        decimal.amount.stream.precision(minTick < 1e-8 ? 10 : 8);
+        decimal.price.stream.precision(abs(log10(tickPrice)));
+        decimal.amount.stream.precision(abs(log10(tickSize)));
         decimal.percent.stream.precision(2);
         for (auto it : (Report){
-          {"symbols", base + "/" + quote},
-          {"minTick", decimal.amount.str(minTick)              },
-          {"minSize", decimal.amount.str(minSize)              },
-          {"makeFee", decimal.percent.str(makeFee * 1e+2) + "%"},
-          {"takeFee", decimal.percent.str(takeFee * 1e+2) + "%"}
+          {"symbols", base + "/" + quote + " ("
+                        + decimal.amount.str(tickSize) + "/"
+                        + decimal.price.str(tickPrice) + ")"                    },
+          {"minSize", decimal.amount.str(minSize) + " " + base                  },
+          {"makeFee", decimal.percent.str(makeFee * 1e+2) + "%"
+                        + (makeFee ? "" : " (please use --maker-fee argument!)")},
+          {"takeFee", decimal.percent.str(takeFee * 1e+2) + "%"
+                        + (takeFee ? "" : " (please use --taker-fee argument!)")}
         }) notes.push_back(it);
         string note = "handshake:";
         for (auto &it : notes)
           if (!it.second.empty())
             note += "\n- " + it.first + ": " + it.second;
-        log((nocache ? "" : "cached ") + note);
+        print((nocache ? "" : "cached ") + note);
       };
       void latency(const string &reason, const function<void()> &fn) {
-        log("latency check", "start");
+        print("latency check", "start");
         const Clock Tstart = Tstamp;
         fn();
         const Clock Tstop  = Tstamp;
-        log("latency check", "stop");
+        print("latency check", "stop");
         const unsigned int Tdiff = Tstop - Tstart;
-        log(reason + " took", to_string(Tdiff) + "ms of your time");
+        print(reason + " took", to_string(Tdiff) + "ms of your time");
         string result = "This result is ";
         if      (Tdiff < 2e+2) result += "very good; most traders don't enjoy such speed!";
         else if (Tdiff < 5e+2) result += "good; most traders get the same result";
         else if (Tdiff < 7e+2) result += "a bit bad; most traders get better results";
         else if (Tdiff < 1e+3) result += "bad; consider moving to another server/network";
         else                   result += "very bad; move to another server/network";
-        log(result);
+        print(result);
       };
       function<void(const string&, const string&, const string&)> printer;
     protected:
-      void log(const string &reason, const string &highlight = "") {
+      void print(const string &reason, const string &highlight = "") {
         if (printer) printer(
           string(reason.find(">>>") != reason.find("<<<")
             ? "DEBUG "
@@ -581,10 +402,6 @@ namespace ₿ {
           reason,
           highlight
         );
-      };
-      void reconnect(const string &reason) {
-        countdown = 7;
-        log("WS " + reason + ", reconnecting in " + to_string(countdown) + "s.");
       };
   };
 
@@ -597,22 +414,131 @@ namespace ₿ {
 
   class GwApiREST: public Gw {
     public:
-      const bool askForData(const unsigned int &tick) override {
-        return askForSyncData(tick);
+      void askForData(const unsigned int &tick) override {
+        askForSyncData(tick);
       };
-      const bool waitForData() override {
-        return waitForSyncData();
+      void waitForData(Loop *const loop) override {
+        waitForSyncData(loop);
       };
   };
-  class GwApiWS: public Gw {
+  class GwApiWs: public Gw,
+                 public Curl::WebSocket {
+    private:
+       unsigned int countdown    = 1;
+               bool subscription = false;
     public:
-      GwApiWS()
-      { countdown = 1; };
-      const bool askForData(const unsigned int &tick) override {
-        return askForNeverAsyncData(tick);
+      const bool connected() const override {
+        return WebSocket::connected();
       };
-      const bool waitForData() override {
-        return waitForNeverAsyncData();
+      void askForData(const unsigned int &tick) override {
+        if (countdown and !--countdown)
+          connect();
+        if (subscribed())
+          askForNeverAsyncData(tick);
+      };
+      void waitForData(Loop *const loop) override {
+        waitForNeverAsyncData(loop);
+      };
+    protected:
+//BO non-free Gw library functions from build-*/local/lib/K-*.a (it just redefines all virtual gateway class members below).
+/**/  virtual void subscribe()   = 0;                                         // send subcription messages to remote server.
+/**/  virtual void consume(json) = 0;                                         // read message one by one from remote server.
+//EO non-free Gw library functions from build-*/local/lib/K-*.a (it just redefines all virtual gateway class members above).
+      virtual void connect() {
+        CURLcode rc;
+        if (CURLE_OK == (rc = WebSocket::connect(ws)))
+          WebSocket::start(GwExchangeData::loopfd, EPOLLIN, [&]() {
+            waitForAsyncData();
+          });
+        else reconnect(string("CURL connect Error: ") + curl_easy_strerror(rc));
+      };
+      void emit(const string &msg) {
+        CURLcode rc;
+        if (CURLE_OK != (rc = WebSocket::emit(msg, 0x01)))
+          print(string("CURL send Error: ") + curl_easy_strerror(rc));
+      };
+      void disconnect() override {
+        WebSocket::emit("", 0x08);
+        WebSocket::cleanup();
+      };
+      void reconnect(const string &reason) {
+        disconnect();
+        countdown = 7;
+        print("WS " + reason + ", reconnecting in " + to_string(countdown) + "s.");
+      };
+      const bool accept_msg(const string &msg) {
+        const bool next = !msg.empty();
+        if (next) {
+          if (json::accept(msg))
+            consume(json::parse(msg));
+          else print("CURL Error: Unsupported data format");
+        }
+        return next;
+      };
+      const bool subscribed() {
+        if (subscription != connected()) {
+          subscription = !subscription;
+          if (subscription) subscribe();
+          else {
+            online(Connectivity::Disconnected);
+            reconnect("Disconnected");
+          };
+        }
+        return subscription;
+      };
+    private:
+      void waitForAsyncData() {
+        CURLcode rc;
+        if (CURLE_OK != (rc = WebSocket::send_recv()))
+          print(string("CURL recv Error: ") + curl_easy_strerror(rc));
+        while (accept_msg(WebSocket::unframe()));
+      };
+  };
+  class GwApiFix: public GwApiWs,
+                  public Curl::FixSocket {
+    protected:
+      string target;
+    public:
+      GwApiFix()
+        : FixSocket(apikey, target)
+      {};
+      const bool connected() const override {
+        return WebSocket::connected()
+           and FixSocket::connected();
+      };
+    protected:
+//BO non-free Gw library functions from build-*/local/lib/K-*.a (it just redefines all virtual gateway class members below).
+/**/  virtual const string logon() = 0;                                                             // return logon message.
+//EO non-free Gw library functions from build-*/local/lib/K-*.a (it just redefines all virtual gateway class members above).
+      void connect() override {
+        GwApiWs::connect();
+        if (WebSocket::connected()) {
+          CURLcode rc;
+          if (CURLE_OK == (rc = FixSocket::connect(fix, logon()))) {
+            FixSocket::start(GwExchangeData::loopfd, EPOLLIN, [&]() {
+              waitForAsyncData();
+            });
+            print("FIX success Logon, streaming orders");
+          } else reconnect(string("CURL connect FIX Error: ") + curl_easy_strerror(rc));
+        }
+      };
+      void disconnect() override {
+        if (FixSocket::connected()) print("FIX Logout");
+        FixSocket::emit("", "5");
+        FixSocket::cleanup();
+        GwApiWs::disconnect();
+      };
+      void beam(const string &msg, const string &type) {
+        CURLcode rc;
+        if (CURLE_OK != (rc = FixSocket::emit(msg, type)))
+          print(string("CURL send FIX Error: ") + curl_easy_strerror(rc));
+      };
+    private:
+      void waitForAsyncData() {
+        CURLcode rc;
+        if (CURLE_OK != (rc = FixSocket::send_recv()))
+          print(string("CURL recv FIX Error: ") + curl_easy_strerror(rc));
+        while (accept_msg(FixSocket::unframe()));
       };
   };
 
@@ -625,13 +551,16 @@ namespace ₿ {
     public:
       const json handshake() override {
         return {
-          {"minTick", 1e-2   },
-          {"minSize", 1e-2   },
-          {  "reply", nullptr}
+          {     "base", base   },
+          {    "quote", quote  },
+          {"tickPrice", 1e-2   },
+          { "tickSize", 1e-2   },
+          {  "minSize", 1e-2   },
+          {    "reply", nullptr}
         };
       };
   };
-  class GwHitBtc: public GwApiWS {
+  class GwHitBtc: public GwApiWs {
     public:
       GwHitBtc()
       {
@@ -640,18 +569,23 @@ namespace ₿ {
         randId = Random::uuid32Id;
       };
       const json handshake() override {
-        const json reply = Curl::xfer(http + "/public/symbol/" + base + quote);
+        symbol = base + quote;
+        const json reply = Curl::Web::xfer(http + "/public/symbol/" + symbol);
         return {
-          {"minTick", stod(reply.value("tickSize", "0"))            },
-          {"minSize", stod(reply.value("quantityIncrement", "0"))   },
-          {"makeFee", stod(reply.value("provideLiquidityRate", "0"))},
-          {"takeFee", stod(reply.value("takeLiquidityRate", "0"))   },
-          {  "reply", reply                                         }
+          {     "base", base == "USDT" ? "USD" : base                 },
+          {    "quote", quote == "USDT" ? "USD" : quote               },
+          {   "symbol", symbol                                        },
+          {"tickPrice", stod(reply.value("tickSize", "0"))            },
+          { "tickSize", stod(reply.value("quantityIncrement", "0"))   },
+          {  "minSize", stod(reply.value("quantityIncrement", "0"))   },
+          {  "makeFee", stod(reply.value("provideLiquidityRate", "0"))},
+          {  "takeFee", stod(reply.value("takeLiquidityRate", "0"))   },
+          {    "reply", reply                                         }
         };
       };
     protected:
       static const json xfer(const string &url, const string &auth, const string &post) {
-        return Curl::perform(url, [&](CURL *curl) {
+        return Curl::Web::request(url, [&](CURL *curl) {
           curl_easy_setopt(curl, CURLOPT_USERPWD, auth.data());
           curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
           curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post.data());
@@ -666,38 +600,42 @@ namespace ₿ {
         ws   = "wss://api.bequant.io/api/2/ws";
       };
   };
-  class GwCoinbase: public GwApiWS,
-                    public FIX::NullApplication {
+  class GwCoinbase: public GwApiFix {
     public:
       GwCoinbase()
       {
         http   = "https://api.pro.coinbase.com";
         ws     = "wss://ws-feed.pro.coinbase.com";
         fix    = "fix.pro.coinbase.com:4198";
+        target = "Coinbase";
         randId = Random::uuid36Id;
       };
       const json handshake() override {
-        const json reply = Curl::xfer(http + "/products/" + base + "-" + quote);
+        symbol = base + "-" + quote;
+        const json reply = Curl::Web::xfer(http + "/products/" + symbol);
         return {
-          {"minTick", stod(reply.value("quote_increment", "0"))},
-          {"minSize", stod(reply.value("base_min_size", "0"))  },
-          {  "reply", reply                                    }
+          {     "base", base                                     },
+          {    "quote", quote                                    },
+          {   "symbol", symbol                                   },
+          {"tickPrice", stod(reply.value("quote_increment", "0"))},
+          { "tickSize", stod(reply.value("base_increment", "0")) },
+          {  "minSize", stod(reply.value("base_min_size", "0"))  },
+          {    "reply", reply                                    }
         };
       };
     protected:
-      static const json xfer(const string &url, const string &h1, const string &h2, const string &h3, const string &h4, const bool &rm) {
-        return Curl::perform(url, [&](CURL *curl) {
+      static const json xfer(const string &url, const string &h1, const string &h2, const string &h3, const string &h4) {
+        return Curl::Web::request(url, [&](CURL *curl) {
           struct curl_slist *h_ = nullptr;
           h_ = curl_slist_append(h_, ("CB-ACCESS-KEY: " + h1).data());
           h_ = curl_slist_append(h_, ("CB-ACCESS-SIGN: " + h2).data());
           h_ = curl_slist_append(h_, ("CB-ACCESS-TIMESTAMP: " + h3).data());
           h_ = curl_slist_append(h_, ("CB-ACCESS-PASSPHRASE: " + h4).data());
           curl_easy_setopt(curl, CURLOPT_HTTPHEADER, h_);
-          if (rm) curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
         });
       };
   };
-  class GwBitfinex: public GwApiWS {
+  class GwBitfinex: public GwApiWs {
     public:
       GwBitfinex()
       {
@@ -707,9 +645,10 @@ namespace ₿ {
         askForReplace = true;
       };
       const json handshake() override {
-        const json reply1 = Curl::xfer(http + "/pubticker/" + base + quote);
-        Price minTick = 0,
-              minSize = 0;
+        symbol = base + quote;
+        const json reply1 = Curl::Web::xfer(http + "/pubticker/" + symbol);
+        Price tickPrice = 0,
+              minSize   = 0;
         if (reply1.find("last_price") != reply1.end()) {
           ostringstream price_;
           price_ << scientific << stod(reply1.value("last_price", "0"));
@@ -718,24 +657,30 @@ namespace ₿ {
             if (*it == '+' or *it == '-') break;
             else it = price.erase(it);
           istringstream iss("1e" + to_string(fmax(stod(price),-4)-4));
-          iss >> minTick;
+          iss >> tickPrice;
         }
-        const json reply2 = Curl::xfer(http + "/symbols_details");
+        const json reply2 = Curl::Web::xfer(http + "/symbols_details");
         if (reply2.is_array())
           for (const json &it : reply2)
-            if (it.find("pair") != it.end() and it.value("pair", "") == Text::strL(base + quote)) {
+            if (it.find("pair") != it.end() and it.value("pair", "") == Text::strL(symbol)) {
               minSize = stod(it.value("minimum_order_size", "0"));
               break;
             }
         return {
-          {"minTick", minTick         },
-          {"minSize", minSize         },
-          {  "reply", {reply1, reply2}}
+          {     "base", base            },
+          {    "quote", quote           },
+          {   "symbol", symbol          },
+          {"tickPrice", tickPrice       },
+          { "tickSize", tickPrice < 1e-8
+                         ? 10
+                         : 8            },
+          {  "minSize", minSize         },
+          {    "reply", {reply1, reply2}}
         };
       };
     protected:
       static const json xfer(const string &url, const string &post, const string &h1, const string &h2) {
-        return Curl::perform(url, [&](CURL *curl) {
+        return Curl::Web::request(url, [&](CURL *curl) {
           struct curl_slist *h_ = nullptr;
           h_ = curl_slist_append(h_, ("X-BFX-APIKEY: " + h1).data());
           h_ = curl_slist_append(h_, ("X-BFX-PAYLOAD: " + post).data());
@@ -753,7 +698,7 @@ namespace ₿ {
         ws   = "wss://api.ethfinex.com/ws/2";
       };
   };
-  class GwFCoin: public GwApiWS {
+  class GwFCoin: public GwApiWs {
     public:
       GwFCoin()
       {
@@ -762,28 +707,33 @@ namespace ₿ {
         randId = Random::char16Id;
       };
       const json handshake() override {
-        const json reply = Curl::xfer(http + "public/symbols");
-        Price minTick = 0,
-              minSize = 0;
+        symbol = base + quote;
+        const json reply = Curl::Web::xfer(http + "public/symbols");
+        Price  tickPrice = 0;
+        Amount tickSize  = 0;
         if (reply.find("data") != reply.end() and reply.at("data").is_array())
           for (const json &it : reply.at("data"))
-            if (it.find("name") != it.end() and it.value("name", "") == Text::strL(base + quote)) {
+            if (it.find("name") != it.end() and it.value("name", "") == Text::strL(symbol)) {
               istringstream iss(
                 "1e-" + to_string(it.value("price_decimal", 0))
                 + " 1e-" + to_string(it.value("amount_decimal", 0))
               );
-              iss >> minTick >> minSize;
+              iss >> tickPrice >> tickSize;
               break;
             }
         return {
-          {"minTick", minTick},
-          {"minSize", minSize},
-          {  "reply", reply  }
+          {     "base", base     },
+          {    "quote", quote    },
+          {   "symbol", symbol   },
+          {"tickPrice", tickPrice},
+          { "tickSize", tickSize },
+          {  "minSize", tickSize },
+          {    "reply", reply    }
         };
       };
     protected:
       static const json xfer(const string &url, const string &h1, const string &h2, const string &h3, const string &post = "") {
-        return Curl::perform(url, [&](CURL *curl) {
+        return Curl::Web::request(url, [&](CURL *curl) {
           struct curl_slist *h_ = nullptr;
           if (!post.empty()) {
             curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post.data());
@@ -804,9 +754,9 @@ namespace ₿ {
         randId = Random::int32Id;
       };
       const json handshake() override {
-        const json reply = Curl::xfer(http + "/0/public/AssetPairs?pair=" + base + quote);
-        Price minTick = 0,
-              minSize = 0;
+        const json reply = Curl::Web::xfer(http + "/0/public/AssetPairs?pair=" + base + quote);
+        Price tickPrice = 0,
+              minSize   = 0;
         if (reply.find("result") != reply.end())
           for (json::const_iterator it = reply.at("result").cbegin(); it != reply.at("result").cend(); ++it)
             if (it.value().find("pair_decimals") != it.value().end()) {
@@ -814,18 +764,27 @@ namespace ₿ {
                 "1e-" + to_string(it.value().value("pair_decimals", 0))
                 + " 1e-" + to_string(it.value().value("lot_decimals", 0))
               );
-              iss >> minTick >> minSize;
+              iss >> tickPrice >> minSize;
+              base   = it.value().value("base", base);
+              quote  = it.value().value("quote", quote);
+              symbol = base + quote;
               break;
             }
         return {
-          {"minTick", minTick},
-          {"minSize", minSize},
-          {  "reply", reply  }
+          {     "base", base            },
+          {    "quote", quote           },
+          {   "symbol", symbol          },
+          {"tickPrice", tickPrice       },
+          { "tickSize", tickPrice < 1e-8
+                         ? 1e-10
+                         : 1e-8         },
+          {  "minSize", minSize         },
+          {    "reply", reply           }
         };
       };
     protected:
       static const json xfer(const string &url, const string &h1, const string &h2, const string &post) {
-        return Curl::perform(url, [&](CURL *curl) {
+        return Curl::Web::request(url, [&](CURL *curl) {
           struct curl_slist *h_ = nullptr;
           h_ = curl_slist_append(h_, ("API-Key: " + h1).data());
           h_ = curl_slist_append(h_, ("API-Sign: " + h2).data());
@@ -842,19 +801,27 @@ namespace ₿ {
         randId = Random::int45Id;
       };
       const json handshake() override {
-        const json reply = Curl::xfer(http + "/public?command=returnTicker")
-                             .value(quote + "_" + base, json::object());
+        symbol = quote + "_" + base;
+        const json reply = Curl::Web::xfer(http + "/public?command=returnTicker")
+                             .value(symbol, json::object());
+        const Price tickPrice = reply.empty()
+                                  ? 0
+                                  : 1e-8;
         return {
-          {"minTick", reply.empty()
-                        ? 0
-                        : 1e-8     },
-          {"minSize", 1e-3         },
-          {  "reply", reply        }
+          {     "base", base            },
+          {    "quote", quote           },
+          {   "symbol", symbol          },
+          {"tickPrice", tickPrice       },
+          { "tickSize", tickPrice < 1e-8
+                          ? 1e-10
+                          : 1e-8        },
+          {  "minSize", 1e-3            },
+          {    "reply", reply           }
         };
       };
     protected:
       static const json xfer(const string &url, const string &post, const string &h1, const string &h2) {
-        return Curl::perform(url, [&](CURL *curl) {
+        return Curl::Web::request(url, [&](CURL *curl) {
           struct curl_slist *h_ = nullptr;
           h_ = curl_slist_append(h_, "Content-Type: application/x-www-form-urlencoded");
           h_ = curl_slist_append(h_, ("Key: " + h1).data());
