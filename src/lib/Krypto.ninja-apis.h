@@ -401,15 +401,16 @@ namespace ₿ {
       };
       function<void(const string&, const string&, const string&)> printer;
     protected:
-      void print(const string &reason, const string &highlight = "") {
-        if (printer) printer(
-          string(reason.find(">>>") != reason.find("<<<")
-            ? "DEBUG "
-            : "GW "
-          ) + exchange,
-          reason,
-          highlight
-        );
+      void print(const string &reason, const string &highlight = "") const {
+        if (printer) {
+          if (reason.find(">>>") != reason.find("<<<")) {
+            if (reason.find("error")) {
+              printer("DEBUG " + exchange, reason, highlight);
+            } else {
+              printer("GW " + exchange, reason, highlight);
+            }
+          }
+        }
       };
   };
 
