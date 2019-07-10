@@ -414,8 +414,10 @@ namespace ₿ {
         if (order) {
           static unsigned rejection_count = 0;
           if (order->status == Status::Rejected) {
+            json orderJson;
+            to_json(orderJson, *static_cast<mTrade *>(order));
             rejection_count = rejection_count + 2;
-            Print::logWar("GW", string("Order ") + order->orderId + " rejected x" + to_string(rejection_count / 2));
+            Print::logWar("GW", string("Order ") + order->orderId + " rejected x" + to_string(rejection_count / 2) + ": " + orderJson.dump());
             if (rejection_count > 60) {
               error("GW", "many orders rejected !!!!!", true);
             }
