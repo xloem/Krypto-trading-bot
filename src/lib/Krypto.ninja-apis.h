@@ -403,10 +403,9 @@ namespace ₿ {
     protected:
       void print(const string &reason, const string &highlight = "") const {
         if (printer) {
+          if (reason.find("error") == string::npos) return;
           if (reason.find(">>>") != reason.find("<<<")) {
-            if (reason.find("error") != string::npos) {
-              printer("DEBUG " + exchange, reason, highlight);
-            }
+            printer("DEBUG " + exchange, reason, highlight);
           } else {
             printer("GW " + exchange, reason, highlight);
           }
