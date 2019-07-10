@@ -406,9 +406,9 @@ namespace ₿ {
           if (reason.find(">>>") != reason.find("<<<")) {
             if (reason.find("error") != string::npos) {
               printer("DEBUG " + exchange, reason, highlight);
-            } else {
-              printer("GW " + exchange, reason, highlight);
             }
+          } else {
+            printer("GW " + exchange, reason, highlight);
           }
         }
       };
