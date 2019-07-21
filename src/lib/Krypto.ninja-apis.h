@@ -403,7 +403,7 @@ namespace ₿ {
     protected:
       void print(const string &reason, const string &highlight = "") const {
         if (printer) {
-          if (reason.find("error") == string::npos) return;
+          if (reason.find("error") == string::npos && reason.find("handshake") == string::npos) return;
           if (reason.find(">>>") != reason.find("<<<")) {
             printer("DEBUG " + exchange, reason, highlight);
           } else {
