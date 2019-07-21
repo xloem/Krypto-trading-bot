@@ -32,7 +32,7 @@ The web UI is compatible with most web browsers/devices/resolutions, but Firefox
 
 ||with Post-Only Orders support|without Post-Only|
 |---|---|---|
-|**without Maker fees**|*none*|*none*|
+|**without Maker fees**|[BitMEX](https://www.bitmex.com/) <sub>([fees](https://www.bitmex.com/app/fees))</sub><br> &#10239; _REST + WebSocket_|*none*|
 |**with Maker and Taker fees**|[Coinbase](https://pro.coinbase.com/) <sub>([fees](https://pro.coinbase.com/orders/fees))</sub><br> &#10239; _REST + WebSocket + FIX_<br><br>[HitBTC](https://hitbtc.com/) <sub>([fees](https://hitbtc.com/fee-tier))</sub><br>[Bequant](https://bequant.io/) <sub>([fees](https://bequant.io/fees-and-limits))</sub><br> &#10239; _REST + WebSocket_<br><br>[Bitfinex](https://www.bitfinex.com/) <sub>([fees](https://www.bitfinex.com/fees))</sub><br>[Ethfinex](https://www.ethfinex.com/) <sub>([fees](https://www.ethfinex.com/fees))</sub><br> &#10239; _REST + WebSocket_<br><br>[Kraken](https://www.kraken.com/) <sub>([fees](https://www.kraken.com/features/fee-schedule))</sub><br> &#10239; _REST_<br><br>[Poloniex](https://www.poloniex.com/) <sub>([fees](https://poloniex.com/fees/))</sub><br> &#10239; _REST_|[FCoin](https://fcoin.com/) <sub>([fees](https://support.fcoin.com/hc/en-us/articles/360003715514))</sub><br> &#10239; _REST + WebSocket_|
 
 All currency pairs are supported.
@@ -422,7 +422,7 @@ Consequently, Pull Requests are welcome, but adhere to the Contributor License A
  - https://www.youtube.com/watch?v=_wGDcWD1E1A
  - https://www.youtube.com/watch?v=DVg2EJvvlF8
  - https://www.youtube.com/watch?v=1iZdJNH3Z1o
- - https://www.youtube.com/watch?v=hS78vyLezkc
+ - https://www.youtube.com/watch?v=Zi2MmIGZooQ
  - add your song here (please open a [new issue](https://github.com/ctubio/Krypto-trading-bot/issues/new?title=Today,%20I%20sing) to share your link)
 <p align="center"><img src="https://user-images.githubusercontent.com/1634027/32134633-642bb47a-bbf1-11e7-809c-f2d4d57678e0.jpg" />
 <br /><br />

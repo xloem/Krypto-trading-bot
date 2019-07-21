@@ -430,12 +430,12 @@ namespace ₿ {
       };
       bool replace(const Price &price, const bool &isPong, mOrder *const order) {
         const bool allowed = mOrder::replace(price, isPong, order);
-        if (K.arg<int>("debug-orders")) report(order, "replace");
+        if (allowed and K.arg<int>("debug-orders")) report(order, "replace");
         return allowed;
       };
       bool cancel(mOrder *const order) {
         const bool allowed = mOrder::cancel(order);
-        if (K.arg<int>("debug-orders")) report(order, "cancel ");
+        if (allowed and K.arg<int>("debug-orders")) report(order, "cancel ");
         return allowed;
       };
       void purge(const mOrder *const order) {
@@ -476,7 +476,7 @@ namespace ₿ {
         Print::log("DEBUG OG", " " + reason + " " + (
           order
             ? order->orderId + "::" + order->exchangeId
-              + " [" + to_string((int)order->status) + "]: "
+              + " [" + to_string((int)order->status) + "/" + (order->side == Side::Bid ? "B" : "S") + "]: "
               + K.gateway->decimal.amount.str(order->quantity) + " " + K.gateway->base + " at price "
               + K.gateway->decimal.price.str(order->price) + " " + K.gateway->quote
             : "not found"
@@ -1553,17 +1553,17 @@ namespace ₿ {
        mRecentTrades recentTrades;
     private_ref:
       const mQuotingParams &qp;
-      const mWallets       &wallets;
+      const mWallet        &base;
       const Price          &fairValue;
       const Amount         &targetBasePosition;
       const Amount         &positionDivergence;
     public:
-      mSafety(const KryptoNinja &bot, const mQuotingParams &q, const mWallets &w, const mButtons &b, const Price &f, const Amount &t, const Amount &p)
+      mSafety(const KryptoNinja &bot, const mQuotingParams &q, const mWallet &w, const mButtons &b, const Price &f, const Amount &t, const Amount &p)
         : Broadcast(bot)
         , trades(bot, q, b)
         , recentTrades(q)
         , qp(q)
-        , wallets(w)
+        , base(w)
         , fairValue(f)
         , targetBasePosition(t)
         , positionDivergence(p)
@@ -1577,7 +1577,7 @@ namespace ₿ {
         calc();
       };
       void calc() {
-        if (!wallets.base.value or !fairValue) return;
+        if (!base.value or !fairValue) return;
         calcSizes();
         calcPrices();
         recentTrades.expire();
@@ -1588,7 +1588,7 @@ namespace ₿ {
         broadcast();
       };
       bool empty() const {
-        return !wallets.base.value or !buySize or !sellSize;
+        return !base.value or !buySize or !sellSize;
       };
       mMatter about() const override {
         return mMatter::TradeSafetyValue;
@@ -1598,54 +1598,50 @@ namespace ₿ {
       };
     private:
       void calcSizes() {
-        if (qp.percentageValues) { 
+        if (qp.percentageValues) {
           sellSize = qp.sellSizePercentage / 1e+2;
-          buySize = qp.buySizePercentage / 1e+2;
-
-          Amount pdivMin = fmax(0, targetBasePosition - positionDivergence);
-          Amount pdivMax = fmin(wallets.base.value, targetBasePosition + positionDivergence);
-          
-          switch (qp.orderPctTotal) {
-          case mOrderPctTotal::Side:
-            sellSize *= wallets.base.total;
-            buySize *= wallets.base.value - wallets.base.total;
-            break;
-          case mOrderPctTotal::TBPSide:
-            sellSize *= pow((wallets.base.total - pdivMin) / (wallets.base.value - pdivMin), qp.tradeSizeTBPExp);
-            buySize *= pow((pdivMax - wallets.base.total) / pdivMax, qp.tradeSizeTBPExp);
-          case mOrderPctTotal::Value: default:
-          case mOrderPctTotal::TBPValue:
-            sellSize *= wallets.base.value;
-            buySize *= wallets.base.value;
-            break;
-          }
-
-          // shrink one side so that sizes are equal at the tbp
-          double expamt = qp.tradeSizeTBPExp;
-          switch (qp.orderPctTotal) {
-            // TBPSide here assumes that when tbp == 50%, pdivMax and pdivMin are equidistant from tbp.
-            //  so, this will need to be adjusted if ever a separate pdivMin and pdivMax are implemented
-          case mOrderPctTotal::TBPValue:
-            expamt = 1;
-          case mOrderPctTotal::TBPSide:
-            if (targetBasePosition * 2 < wallets.base.value) {
-              buySize *= pow((targetBasePosition - pdivMin) * pdivMax / ((wallets.base.value - pdivMin) * (pdivMax - targetBasePosition)), expamt);
-            } else {
-              sellSize *= pow((wallets.base.value - pdivMin) * (pdivMax - targetBasePosition) / ((targetBasePosition - pdivMin) * pdivMax), expamt);
+          buySize  = qp.buySizePercentage / 1e+2;
+          const Amount pdivMin = fmax(0, targetBasePosition - positionDivergence),
+                       pdivMax = fmin(base.value, targetBasePosition + positionDivergence);
+          if (qp.orderPctTotal == mOrderPctTotal::Side) {
+            sellSize *= base.total;
+            buySize  *= base.value - base.total;
+          } else {
+            if (qp.orderPctTotal == mOrderPctTotal::TBPSide) {
+              sellSize *= pow((base.total - pdivMin) / (base.value - pdivMin), qp.tradeSizeTBPExp);
+              buySize  *= pow((pdivMax - base.total) / pdivMax, qp.tradeSizeTBPExp);
             }
-            break;
+            sellSize *= base.value;
+            buySize  *= base.value;
+            if (qp.orderPctTotal == mOrderPctTotal::TBPSide
+              or qp.orderPctTotal == mOrderPctTotal::TBPValue
+            ) {
+              const double exp = qp.orderPctTotal == mOrderPctTotal::TBPValue
+                               ? 1.0
+                               : qp.tradeSizeTBPExp;
+              if (targetBasePosition * 2 < base.value)
+                buySize *= pow(
+                  (targetBasePosition - pdivMin) * pdivMax / ((base.value - pdivMin) * (pdivMax - targetBasePosition)),
+                  exp
+                );
+              else
+                sellSize *= pow(
+                  (base.value - pdivMin) * (pdivMax - targetBasePosition) / ((targetBasePosition - pdivMin) * pdivMax),
+                  exp
+                );
+            }
           }
           sellSize = fmax(0.0, sellSize);
-          buySize = fmax(0.0, buySize);
+          buySize  = fmax(0.0, buySize);
         } else {
           sellSize = qp.sellSize;
-          buySize = qp.buySize;
+          buySize  = qp.buySize;
         }
         if (qp.aggressivePositionRebalancing == mAPR::Off) return;
         if (qp.buySizeMax)
-          buySize = fmax(buySize, targetBasePosition - wallets.base.total);
+          buySize = fmax(buySize, targetBasePosition - base.total);
         if (qp.sellSizeMax)
-          sellSize = fmax(sellSize, wallets.base.total - targetBasePosition);
+          sellSize = fmax(sellSize, base.total - targetBasePosition);
       };
       void calcPrices() {
         if (qp.safety == mQuotingSafety::PingPong) {
@@ -1753,7 +1749,7 @@ namespace ₿ {
       {};
       void calcTargetBasePos() {
         if (warn_empty()) return;
-        targetBasePosition = K.gateway->decimal.amount.round(
+        targetBasePosition = K.gateway->decimal.funds.round(
           qp.autoPositionMode == mAutoPositionMode::Manual
             ? (qp.percentageValues
               ? qp.targetBasePositionPercentage * baseValue / 1e+2
@@ -1816,13 +1812,13 @@ namespace ₿ {
           else if (mPDivMode::SQRT == qp.positionDivergenceMode)   positionDivergence = pDivMin + (sqrt(divCenter) * (pDiv - pDivMin));
           else if (mPDivMode::Switch == qp.positionDivergenceMode) positionDivergence = divCenter < 1e-1 ? pDivMin : pDiv;
         }
-        positionDivergence = K.gateway->decimal.amount.round(positionDivergence);
+        positionDivergence = K.gateway->decimal.funds.round(positionDivergence);
       };
       void report() const {
         Print::log("PG", "TBP: "
-          + to_string((int)(targetBasePosition / baseValue * 1e+2)) + "% = " + K.gateway->decimal.amount.str(targetBasePosition)
+          + to_string((int)(targetBasePosition / baseValue * 1e+2)) + "% = " + K.gateway->decimal.funds.str(targetBasePosition)
           + " " + K.gateway->base + ", pDiv: "
-          + to_string((int)(positionDivergence / baseValue * 1e+2)) + "% = " + K.gateway->decimal.amount.str(positionDivergence)
+          + to_string((int)(positionDivergence / baseValue * 1e+2)) + "% = " + K.gateway->decimal.funds.str(positionDivergence)
           + " " + K.gateway->base);
       };
       string explain() const override {
@@ -1857,7 +1853,7 @@ namespace ₿ {
       mWalletPosition(const KryptoNinja &bot, mQuotingParams &q, const mOrders &o, const mButtons &b, const mMarketLevels &l)
         : Broadcast(bot)
         , target(bot, q, l.stats.ewma.targetPositionAutoPercentage, base.value)
-        , safety(bot, q, *this, b, l.fairValue, target.targetBasePosition, target.positionDivergence)
+        , safety(bot, q, base, b, l.fairValue, target.targetBasePosition, target.positionDivergence)
         , profits(bot, q)
         , K(bot)
         , qp(q)
@@ -1883,10 +1879,12 @@ namespace ₿ {
         if (order.tradeQuantity) {
           calcLocalBalance(order);
           safety.insertTrade(order);
-          *askForFees = true;
+          *askForFees = !K.gateway->margin;
         }
-        calcHeldAmount(order.side);
-        calcFundsSilently();
+        if (!K.gateway->margin) {
+          calcHeldAmount(order.side);
+          calcFundsSilently();
+        }
       };
       mMatter about() const override {
         return mMatter::Position;
@@ -2354,12 +2352,14 @@ namespace ₿ {
         if (!qp.buySizeMax and !quotes.bid.empty())
           quotes.bid.size = fmin(
             qp.sopSizeMultiplier * quotes.bid.size,
-            (wallet.quote.amount / quotes.bid.price) / 2
+              K.gateway->margin
+                ? (wallet.base.amount * quotes.bid.price) / 2
+                : (wallet.quote.amount / quotes.bid.price) / 2
           );
         if (!qp.sellSizeMax and !quotes.ask.empty())
           quotes.ask.size = fmin(
             qp.sopSizeMultiplier * quotes.ask.size,
-            wallet.base.amount / 2
+            (wallet.base.amount / 2) * (K.gateway->margin ? quotes.ask.price : 1)
           );
       };
       void applyEwmaProtection() {
@@ -2377,7 +2377,7 @@ namespace ₿ {
             if (!qp.buySizeMax)
               quotes.bid.size = fmin(
                 qp.aprMultiplier * quotes.bid.size,
-                wallet.target.targetBasePosition - wallet.base.total
+                (wallet.target.targetBasePosition - wallet.base.total) * (K.gateway->margin ? quotes.bid.price : 1)
               );
           }
         }
@@ -2388,7 +2388,7 @@ namespace ₿ {
             if (!qp.sellSizeMax)
               quotes.ask.size = fmin(
                 qp.aprMultiplier * quotes.ask.size,
-                wallet.base.total - wallet.target.targetBasePosition
+                (wallet.base.total - wallet.target.targetBasePosition) * (K.gateway->margin ? quotes.ask.price : 1)
               );
           }
         }
@@ -2453,7 +2453,7 @@ namespace ₿ {
                 or qp.pongAt == mPongAt::AveragePingAggressive
                 or qp.pongAt == mPongAt::LongPingAggressive
             )
-          ) quotes.ask.price = max(levels.bids.at(0).price + K.gateway->tickPrice, sellPong);
+          ) quotes.ask.price = fmax(levels.bids.at(0).price + K.gateway->tickPrice, sellPong);
           quotes.ask.isPong = quotes.ask.price >= sellPong;
         }
         if (!quotes.bid.empty() and wallet.safety.sellPing) {
@@ -2465,7 +2465,7 @@ namespace ₿ {
                 or qp.pongAt == mPongAt::AveragePingAggressive
                 or qp.pongAt == mPongAt::LongPingAggressive
             )
-          ) quotes.bid.price = min(levels.asks.at(0).price - K.gateway->tickPrice, buyPong);
+          ) quotes.bid.price = fmin(levels.asks.at(0).price - K.gateway->tickPrice, buyPong);
           quotes.bid.isPong = quotes.bid.price <= buyPong;
         }
       };
@@ -2534,7 +2534,9 @@ namespace ₿ {
             fmax(K.gateway->minSize, fmin(
               quotes.bid.size,
               K.gateway->decimal.amount.floor(
-                wallet.quote.total / (quotes.bid.price * (1.0 + K.gateway->makeFee))
+                K.gateway->margin
+                  ? wallet.base.total * quotes.bid.price
+                  : wallet.quote.total / (quotes.bid.price * (1.0 + K.gateway->makeFee))
               )
             ))
           );
@@ -2543,17 +2545,20 @@ namespace ₿ {
             fmax(K.gateway->minSize, fmin(
               quotes.ask.size,
               K.gateway->decimal.amount.floor(
-                wallet.base.total
+                wallet.base.total * (K.gateway->margin ? quotes.ask.price : 1)
               )
             ))
           );
       };
       void applyDepleted() {
         if (!quotes.bid.empty()
-          and wallet.quote.total / quotes.bid.price < K.gateway->minSize * (1.0 + K.gateway->makeFee)
+          and (K.gateway->margin
+            ? wallet.base.total * quotes.bid.price
+            : wallet.quote.total / quotes.bid.price
+          ) < K.gateway->minSize * (1.0 + K.gateway->makeFee)
         ) quotes.bid.clear(mQuoteState::DepletedFunds);
         if (!quotes.ask.empty()
-          and wallet.base.total < K.gateway->minSize * (1.0 + K.gateway->makeFee)
+          and (wallet.base.total * (K.gateway->margin ? quotes.ask.price : 1)) < K.gateway->minSize * (1.0 + K.gateway->makeFee)
         ) quotes.ask.clear(mQuoteState::DepletedFunds);
       };
       void applyWaitingPing() {
@@ -2733,15 +2738,21 @@ namespace ₿ {
       {};
       json to_json() const {
         return {
-          {   "exchange", K.gateway->exchange        },
-          {       "base", K.gateway->base            },
-          {      "quote", K.gateway->quote           },
-          {  "tickPrice", K.gateway->tickPrice       },
-          {   "tickSize", K.gateway->tickSize        },
-          {    "minSize", K.gateway->minSize         },
-          {       "inet", K.arg<string>("interface") },
-          {"environment", K.arg<string>("title")     },
-          { "matryoshka", K.arg<string>("matryoshka")}
+          {   "exchange", K.gateway->exchange                         },
+          {       "base", K.gateway->base                             },
+          {      "quote", K.gateway->quote                            },
+          {     "margin", K.gateway->margin                           },
+          {  "webMarket", K.gateway->webMarket                        },
+          {  "webOrders", K.gateway->webOrders                        },
+          {  "tickFunds", K.gateway->decimal.funds.stream.precision() },
+          {  "tickPrice", K.gateway->decimal.price.stream.precision() },
+          {   "tickSize", K.gateway->decimal.amount.stream.precision()},
+          {  "stepPrice", K.gateway->decimal.price.step               },
+          {   "stepSize", K.gateway->decimal.amount.step              },
+          {    "minSize", K.gateway->minSize                          },
+          {       "inet", K.arg<string>("interface")                  },
+          {"environment", K.arg<string>("title")                      },
+          { "matryoshka", K.arg<string>("matryoshka")                 }
         };
       };
       mMatter about() const override {

@@ -162,18 +162,27 @@ namespace ₿ {
       class Decimal {
         public:
           stringstream stream;
+          double step = 0;
+        private:
+          double tick = 0;
         public:
           Decimal()
           {
             stream << fixed;
           };
+          void precision(const double &t) {
+            stream.precision(ceil(abs(log10(tick = t))));
+            step = pow(10, -1 * stream.precision());
+          };
           double round(const double &input) const {
-            const double points = pow(10, -1 * stream.precision());
-            return ::round(input / points) * points;
+            return ::round((::round(
+              input / step) * step)
+                    / tick) * tick;
           };
           double floor(const double &input) const {
-            const double points = pow(10, -1 * stream.precision());
-            return ::floor(input / points) * points;
+            return ::floor((::floor(
+              input / step) * step)
+                    / tick) * tick;
           };
           string str(const double &input) {
             stream.str("");
@@ -183,7 +192,8 @@ namespace ₿ {
       };
     public:
       struct {
-        Decimal price,
+        Decimal funds,
+                price,
                 amount,
                 percent;
       } decimal;
@@ -299,16 +309,19 @@ namespace ₿ {
   class GwExchange: public GwExchangeData {
     public:
       using Report = vector<pair<string, string>>;
-      string exchange, apikey, secret, pass,
-             base,     quote,  symbol,
-             http,     ws,     fix,
-             unlock;
+      string exchange,   apikey,    secret, pass,
+             base,       quote,     symbol,
+             http,       ws,        fix,
+             webMarket,  webOrders, unlock;
        Price tickPrice = 0;
-      Amount tickSize  = 0,
+      Amount tickFunds = 0,
+             tickSize  = 0,
              minSize   = 0,
              makeFee   = 0,
              takeFee   = 0;
       size_t maxLevel  = 0;
+      double leverage  = 0;
+        bool margin    = false;
          int debug     = 0;
       virtual void disconnect() {};
       virtual bool connected() const { return true; };
@@ -331,16 +344,19 @@ namespace ₿ {
           reply = json::parse(file);
         } else
           reply = handshake();
-        base = reply.value("base", base);
-        quote = reply.value("quote", quote);
-        symbol = reply.value("symbol", symbol);
+        base      = reply.value("base",      base);
+        quote     = reply.value("quote",     quote);
+        symbol    = reply.value("symbol",    symbol);
+        webMarket = reply.value("webMarket", webMarket);
+        webOrders = reply.value("webOrders", webOrders);
+        tickFunds = reply.value("tickFunds", 0.0);
         tickPrice = reply.value("tickPrice", 0.0);
-        tickSize = reply.value("tickSize", 0.0);
+        tickSize  = reply.value("tickSize",  0.0);
         if (!minSize) minSize = reply.value("minSize", 0.0);
         if (!makeFee) makeFee = reply.value("makeFee", 0.0);
         if (!takeFee) takeFee = reply.value("takeFee", 0.0);
         if (!file.is_open()
-          and tickPrice and tickSize and minSize
+          and tickFunds and tickPrice and tickSize and minSize
           and !base.empty() and !quote.empty()
         ) {
           file.open(cache, fstream::out | fstream::trunc);
@@ -361,18 +377,20 @@ namespace ₿ {
         system(cmd.c_str());
       };
       void report(Report notes, const bool &nocache) {
-        decimal.price.stream.precision(abs(log10(tickPrice)));
-        decimal.amount.stream.precision(abs(log10(tickSize)));
-        decimal.percent.stream.precision(2);
+        decimal.funds.precision(tickFunds);
+        decimal.price.precision(tickPrice);
+        decimal.amount.precision(tickSize);
+        decimal.percent.precision(1e-2);
         for (auto it : (Report){
           {"symbols", base + "/" + quote + " ("
-                        + decimal.amount.str(tickSize) + "/"
-                        + decimal.price.str(tickPrice) + ")"                    },
-          {"minSize", decimal.amount.str(minSize) + " " + base                  },
+                        + decimal.funds.str(tickFunds) + "/"
+                        + decimal.price.str(tickPrice) + ")"                              },
+          {"minSize", decimal.amount.str(minSize) + " "
+                        + (margin ? "Contract" + string(minSize == 1 ? 0 : 1, 's') : base)},
           {"makeFee", decimal.percent.str(makeFee * 1e+2) + "%"
-                        + (makeFee ? "" : " (please use --maker-fee argument!)")},
+                        + (makeFee ? "" : " (please use --maker-fee argument!)")          },
           {"takeFee", decimal.percent.str(takeFee * 1e+2) + "%"
-                        + (takeFee ? "" : " (please use --taker-fee argument!)")}
+                        + (takeFee ? "" : " (please use --taker-fee argument!)")          }
         }) notes.push_back(it);
         string note = "handshake:";
         for (auto &it : notes)
@@ -417,6 +435,7 @@ namespace ₿ {
       function<void(const string&, const string&, const string&)> printer;
     protected:
       void print(const string &reason, const string &highlight = "") const {
+        if (reason.find("error") == string::npos && reason.find("handshake") == string::npos) return;
         if (printer) printer(
           string(reason.find(">>>") != reason.find("<<<")
             ? "DEBUG "
@@ -427,10 +446,12 @@ namespace ₿ {
         );
       };
       void reduce(mLevels &levels) {
-        if (maxLevel and levels.bids.size() > maxLevel)
-          levels.bids.erase(levels.bids.begin() + maxLevel, levels.bids.end());
-        if (maxLevel and levels.asks.size() > maxLevel)
-          levels.asks.erase(levels.asks.begin() + maxLevel, levels.asks.end());
+        if (maxLevel) {
+          if (levels.bids.size() > maxLevel)
+            levels.bids.erase(levels.bids.begin() + maxLevel, levels.bids.end());
+          if (levels.asks.size() > maxLevel)
+            levels.asks.erase(levels.asks.begin() + maxLevel, levels.asks.end());
+        }
       };
   };
 
@@ -580,13 +601,65 @@ namespace ₿ {
     public:
       json handshake() override {
         return {
-          {     "base", base   },
-          {    "quote", quote  },
-          {"tickPrice", 1e-2   },
-          { "tickSize", 1e-2   },
-          {  "minSize", 1e-2   },
-          {    "reply", nullptr}
+          {     "base", base     },
+          {    "quote", quote    },
+          {"webMarket", webMarket},
+          {"webOrders", webOrders},
+          {"tickFunds", 1e-2     },
+          {"tickPrice", 1e-2     },
+          { "tickSize", 1e-2     },
+          {  "minSize", 1e-2     },
+          {    "reply", nullptr  }
         };
+      };
+  };
+  class GwBitmex: public GwApiWs {
+    public:
+      GwBitmex()
+      {
+        http   = "https://www.bitmex.com/api/v1";
+        ws     = "wss://www.bitmex.com/realtime";
+        randId = Random::uuid36Id;
+        askForReplace = true;
+        webMarket = "https://www.bitmex.com/app/trade/";
+        webOrders = "https://www.bitmex.com/app/orderHistory";
+        margin = true;
+      };
+      json handshake() override {
+        symbol = base + quote;
+        webMarket += base + quote;
+        json reply = Curl::Web::xfer(http + "/instrument?symbol=" + symbol);
+        if (reply.is_array())
+          for (const json &it : reply) {
+            reply = it;
+            break;
+          }
+        return {
+          {     "base", base                           },
+          {    "quote", quote                          },
+          {   "symbol", symbol                         },
+          {"webMarket", webMarket                      },
+          {"webOrders", webOrders                      },
+          {"tickFunds", reply.value("fundingRate", 0.0)},
+          {"tickPrice", reply.value("tickSize", 0.0)   },
+          { "tickSize", reply.value("lotSize", 0.0)    },
+          {  "minSize", reply.value("lotSize", 0.0)    },
+          {  "makeFee", reply.value("makerFee", 0.0)   },
+          {  "takeFee", reply.value("takerFee", 0.0)   },
+          {    "reply", reply                          }
+        };
+      };
+    protected:
+      static json xfer(const string &url, const string &h1, const string &h2, const string &h3, const string &post, const string &crud) {
+        return Curl::Web::request(url, [&](CURL *curl) {
+          struct curl_slist *h_ = nullptr;
+          h_ = curl_slist_append(h_, ("api-expires: "   + h1).data());
+          h_ = curl_slist_append(h_, ("api-key: "       + h2).data());
+          h_ = curl_slist_append(h_, ("api-signature: " + h3).data());
+          curl_easy_setopt(curl, CURLOPT_HTTPHEADER, h_);
+          curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, crud.data());
+          curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post.data());
+        });
       };
   };
   class GwHitBtc: public GwApiWs {
@@ -596,14 +669,20 @@ namespace ₿ {
         http   = "https://api.hitbtc.com/api/2";
         ws     = "wss://api.hitbtc.com/api/2/ws";
         randId = Random::uuid32Id;
+        webMarket = "https://hitbtc.com/exchange/";
+        webOrders = "https://hitbtc.com/reports/orders";
       };
       json handshake() override {
         symbol = base + quote;
+        webMarket += base + "-to-" + quote;
         const json reply = Curl::Web::xfer(http + "/public/symbol/" + symbol);
         return {
           {     "base", base == "USDT" ? "USD" : base                 },
           {    "quote", quote == "USDT" ? "USD" : quote               },
           {   "symbol", symbol                                        },
+          {"webMarket", webMarket                                     },
+          {"webOrders", webOrders                                     },
+          {"tickFunds", stod(reply.value("quantityIncrement", "0"))   },
           {"tickPrice", stod(reply.value("tickSize", "0"))            },
           { "tickSize", stod(reply.value("quantityIncrement", "0"))   },
           {  "minSize", stod(reply.value("quantityIncrement", "0"))   },
@@ -627,6 +706,8 @@ namespace ₿ {
       {
         http = "https://api.bequant.io/api/2";
         ws   = "wss://api.bequant.io/api/2/ws";
+        webMarket = "https://bequant.io/exchange/";
+        webOrders = "https://bequant.io/reports/orders";
       };
   };
   class GwCoinbase: public GwApiFix {
@@ -638,14 +719,21 @@ namespace ₿ {
         fix    = "fix.pro.coinbase.com:4198";
         target = "Coinbase";
         randId = Random::uuid36Id;
+        webMarket = "https://pro.coinbase.com/trade/";
+        webOrders = "https://pro.coinbase.com/orders/";
       };
       json handshake() override {
         symbol = base + "-" + quote;
+        webMarket += base + quote;
+        webOrders += base + quote;
         const json reply = Curl::Web::xfer(http + "/products/" + symbol);
         return {
           {     "base", base                                     },
           {    "quote", quote                                    },
           {   "symbol", symbol                                   },
+          {"webMarket", webMarket                                },
+          {"webOrders", webOrders                                },
+          {"tickFunds", stod(reply.value("base_increment", "0")) },
           {"tickPrice", stod(reply.value("quote_increment", "0"))},
           { "tickSize", stod(reply.value("base_increment", "0")) },
           {  "minSize", stod(reply.value("base_min_size", "0"))  },
@@ -656,9 +744,9 @@ namespace ₿ {
       static json xfer(const string &url, const string &h1, const string &h2, const string &h3, const string &h4) {
         return Curl::Web::request(url, [&](CURL *curl) {
           struct curl_slist *h_ = nullptr;
-          h_ = curl_slist_append(h_, ("CB-ACCESS-KEY: " + h1).data());
-          h_ = curl_slist_append(h_, ("CB-ACCESS-SIGN: " + h2).data());
-          h_ = curl_slist_append(h_, ("CB-ACCESS-TIMESTAMP: " + h3).data());
+          h_ = curl_slist_append(h_, ("CB-ACCESS-KEY: "        + h1).data());
+          h_ = curl_slist_append(h_, ("CB-ACCESS-SIGN: "       + h2).data());
+          h_ = curl_slist_append(h_, ("CB-ACCESS-TIMESTAMP: "  + h3).data());
           h_ = curl_slist_append(h_, ("CB-ACCESS-PASSPHRASE: " + h4).data());
           curl_easy_setopt(curl, CURLOPT_HTTPHEADER, h_);
         });
@@ -672,9 +760,12 @@ namespace ₿ {
         ws     = "wss://api.bitfinex.com/ws/2";
         randId = Random::int45Id;
         askForReplace = true;
+        webMarket = "https://www.bitfinex.com/trading/";
+        webOrders = "https://www.bitfinex.com/reports/orders";
       };
       json handshake() override {
         symbol = base + quote;
+        webMarket += symbol;
         const json reply1 = Curl::Web::xfer(http + "/pubticker/" + symbol);
         Price tickPrice = 0,
               minSize   = 0;
@@ -699,6 +790,11 @@ namespace ₿ {
           {     "base", base            },
           {    "quote", quote           },
           {   "symbol", symbol          },
+          {"webMarket", webMarket       },
+          {"webOrders", webOrders       },
+          {"tickFunds", tickPrice < 1e-8
+                         ? 1e-10
+                         : 1e-8         },
           {"tickPrice", tickPrice       },
           { "tickSize", tickPrice < 1e-8
                          ? 1e-10
@@ -711,8 +807,8 @@ namespace ₿ {
       static json xfer(const string &url, const string &post, const string &h1, const string &h2) {
         return Curl::Web::request(url, [&](CURL *curl) {
           struct curl_slist *h_ = nullptr;
-          h_ = curl_slist_append(h_, ("X-BFX-APIKEY: " + h1).data());
-          h_ = curl_slist_append(h_, ("X-BFX-PAYLOAD: " + post).data());
+          h_ = curl_slist_append(h_, ("X-BFX-APIKEY: "    + h1).data());
+          h_ = curl_slist_append(h_, ("X-BFX-PAYLOAD: "   + post).data());
           h_ = curl_slist_append(h_, ("X-BFX-SIGNATURE: " + h2).data());
           curl_easy_setopt(curl, CURLOPT_HTTPHEADER, h_);
           curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post.data());
@@ -725,6 +821,8 @@ namespace ₿ {
       {
         http = "https://api.ethfinex.com/v1";
         ws   = "wss://api.ethfinex.com/ws/2";
+        webMarket = "https://www.ethfinex.com/trading/";
+        webOrders = "https://www.ethfinex.com/reports/orders";
       };
   };
   class GwFCoin: public GwApiWs {
@@ -734,9 +832,12 @@ namespace ₿ {
         http   = "https://api.fcoin.com/v2/";
         ws     = "wss://api.fcoin.com/v2/ws";
         randId = Random::char16Id;
+        webMarket = "https://exchange.fcoin.com/ex/main/";
+        webOrders = "https://exchange.fcoin.com/orders";
       };
       json handshake() override {
         symbol = base + quote;
+        webMarket += base + "-" + quote;
         const json reply = Curl::Web::xfer(http + "public/symbols");
         Price  tickPrice = 0;
         Amount tickSize  = 0;
@@ -754,6 +855,9 @@ namespace ₿ {
           {     "base", base     },
           {    "quote", quote    },
           {   "symbol", symbol   },
+          {"webMarket", webMarket},
+          {"webOrders", webOrders},
+          {"tickFunds", tickSize },
           {"tickPrice", tickPrice},
           { "tickSize", tickSize },
           {  "minSize", tickSize },
@@ -768,7 +872,7 @@ namespace ₿ {
             curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post.data());
             h_ = curl_slist_append(h_, "Content-Type: application/json;charset=UTF-8");
           }
-          h_ = curl_slist_append(h_, ("FC-ACCESS-KEY: " + h1).data());
+          h_ = curl_slist_append(h_, ("FC-ACCESS-KEY: "       + h1).data());
           h_ = curl_slist_append(h_, ("FC-ACCESS-SIGNATURE: " + h2).data());
           h_ = curl_slist_append(h_, ("FC-ACCESS-TIMESTAMP: " + h3).data());
           curl_easy_setopt(curl, CURLOPT_HTTPHEADER, h_);
@@ -781,6 +885,8 @@ namespace ₿ {
       {
         http   = "https://api.kraken.com";
         randId = Random::int32Id;
+        webMarket = "https://www.kraken.com/charts";
+        webOrders = "https://www.kraken.com/u/trade";
       };
       json handshake() override {
         const json reply = Curl::Web::xfer(http + "/0/public/AssetPairs?pair=" + base + quote);
@@ -803,6 +909,11 @@ namespace ₿ {
           {     "base", base            },
           {    "quote", quote           },
           {   "symbol", symbol          },
+          {"webMarket", webMarket       },
+          {"webOrders", webOrders       },
+          {"tickFunds", tickPrice < 1e-8
+                         ? 1e-10
+                         : 1e-8         },
           {"tickPrice", tickPrice       },
           { "tickSize", tickPrice < 1e-8
                          ? 1e-10
@@ -815,7 +926,7 @@ namespace ₿ {
       static json xfer(const string &url, const string &h1, const string &h2, const string &post) {
         return Curl::Web::request(url, [&](CURL *curl) {
           struct curl_slist *h_ = nullptr;
-          h_ = curl_slist_append(h_, ("API-Key: " + h1).data());
+          h_ = curl_slist_append(h_, ("API-Key: "  + h1).data());
           h_ = curl_slist_append(h_, ("API-Sign: " + h2).data());
           curl_easy_setopt(curl, CURLOPT_HTTPHEADER, h_);
           curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post.data());
@@ -828,6 +939,8 @@ namespace ₿ {
       {
         http   = "https://poloniex.com";
         randId = Random::int45Id;
+        webMarket = "https://poloniex.com/exchange";
+        webOrders = "https://poloniex.com/tradeHistory";
       };
       json handshake() override {
         symbol = quote + "_" + base;
@@ -840,6 +953,11 @@ namespace ₿ {
           {     "base", base            },
           {    "quote", quote           },
           {   "symbol", symbol          },
+          {"webMarket", webMarket       },
+          {"webOrders", webOrders       },
+          {"tickFunds", tickPrice < 1e-8
+                          ? 1e-10
+                          : 1e-8        },
           {"tickPrice", tickPrice       },
           { "tickSize", tickPrice < 1e-8
                           ? 1e-10
@@ -853,7 +971,7 @@ namespace ₿ {
         return Curl::Web::request(url, [&](CURL *curl) {
           struct curl_slist *h_ = nullptr;
           h_ = curl_slist_append(h_, "Content-Type: application/x-www-form-urlencoded");
-          h_ = curl_slist_append(h_, ("Key: " + h1).data());
+          h_ = curl_slist_append(h_, ("Key: "  + h1).data());
           h_ = curl_slist_append(h_, ("Sign: " + h2).data());
           curl_easy_setopt(curl, CURLOPT_HTTPHEADER, h_);
           curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post.data());
