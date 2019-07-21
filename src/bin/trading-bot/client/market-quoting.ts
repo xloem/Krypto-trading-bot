@@ -5,10 +5,10 @@ import * as Models from './models';
 @Component({
   selector: 'market-quoting',
   template: `<div class="tradeSafety2" style="margin-top:-4px;padding-top:0px;padding-right:0px;"><div style="padding-top:0px;padding-right:0px;">
-      Market Width: <span class="{{ marketWidth ? \'text-danger\' : \'text-muted\' }}">{{ marketWidth | number:'1.'+product.fixedPrice+'-'+product.fixedPrice }}</span>,
-      Quote Width: <span class="{{ ordersWidth ? \'text-danger\' : \'text-muted\' }}">{{ ordersWidth | number:'1.'+product.fixedPrice+'-'+product.fixedPrice }}</span>, Quotes: <span title="Quotes in memory Waiting status update" class="{{ quotesInMemoryWaiting ? \'text-danger\' : \'text-muted\' }}">{{ quotesInMemoryWaiting }}</span>/<span title="Quotes in memory Working" class="{{ quotesInMemoryWorking ? \'text-danger\' : \'text-muted\' }}">{{ quotesInMemoryWorking }}</span>/<span title="Quotes in memory Zombie" class="{{ quotesInMemoryZombies ? \'text-danger\' : \'text-muted\' }}">{{ quotesInMemoryZombies }}</span>
-      <div style="padding-left:0px;">Wallet TBP: <span class="text-danger">{{ targetBasePosition | number:'1.'+product.fixedSize+'-'+product.fixedSize }}</span>, pDiv: <span class="text-danger">{{ positionDivergence | number:'1.'+product.fixedSize+'-'+product.fixedSize }}</span>, APR: <span class="{{ sideAPRSafety!=\'Off\' ? \'text-danger\' : \'text-muted\' }}">{{ sideAPRSafety }}</span></div>
-      </div></div><div style="padding-right:4px;padding-left:4px;padding-top:4px;">
+      Market Width: <span class="{{ marketWidth ? \'text-danger\' : \'text-muted\' }}">{{ marketWidth.toFixed(product.tickPrice) }}</span>,
+      Quote Width: <span class="{{ ordersWidth ? \'text-danger\' : \'text-muted\' }}">{{ ordersWidth.toFixed(product.tickPrice) }}</span>, Quotes: <span title="Quotes in memory Waiting status update" class="{{ quotesInMemoryWaiting ? \'text-danger\' : \'text-muted\' }}">{{ quotesInMemoryWaiting }}</span>/<span title="Quotes in memory Working" class="{{ quotesInMemoryWorking ? \'text-danger\' : \'text-muted\' }}">{{ quotesInMemoryWorking }}</span>/<span title="Quotes in memory Zombie" class="{{ quotesInMemoryZombies ? \'text-danger\' : \'text-muted\' }}">{{ quotesInMemoryZombies }}</span>
+      <div style="padding-left:0px;">Wallet TBP: <span class="text-danger">{{ targetBasePosition.toFixed(product.tickFunds) }}</span>, pDiv: <span class="text-danger">{{ positionDivergence.toFixed(product.tickFunds) }}</span>, APR: <span class="{{ sideAPRSafety!=\'Off\' ? \'text-danger\' : \'text-muted\' }}">{{ sideAPRSafety }}</span></div>
+      </div></div><div style="padding-right:4px;padding-left:4px;padding-top:4px;line-height:1.3;">
       <table class="marketQuoting table table-hover table-responsive text-center">
         <tr class="info">
           <td>bidSize&nbsp;</td>
@@ -17,50 +17,47 @@ import * as Models from './models';
           <td>askSize&nbsp;</td>
         </tr>
         <tr class="info">
-          <th *ngIf="bidStatus == 'Live'" class="text-danger">{{ qBidSz | number:'1.4-4' }}<span *ngIf="!qBidSz">&nbsp;</span></th>
-          <th *ngIf="bidStatus == 'Live'" class="text-danger">{{ qBidPx | number:'1.'+product.fixedPrice+'-'+product.fixedPrice }}</th>
+          <th *ngIf="bidStatus == 'Live'" class="text-danger">{{ qBidSz.toFixed(product.tickSize) }}<span *ngIf="!qBidSz">&nbsp;</span></th>
+          <th *ngIf="bidStatus == 'Live'" class="text-danger">{{ qBidPx.toFixed(product.tickPrice) }}</th>
           <th *ngIf="bidStatus != 'Live'" colspan="2" class="text-danger" title="Bids Quote Status">{{ bidStatus }}</th>
-          <th *ngIf="askStatus == 'Live'" class="text-danger">{{ qAskPx | number:'1.'+product.fixedPrice+'-'+product.fixedPrice }}</th>
-          <th *ngIf="askStatus == 'Live'" class="text-danger">{{ qAskSz | number:'1.4-4' }}<span *ngIf="!qAskSz">&nbsp;</span></th>
+          <th *ngIf="askStatus == 'Live'" class="text-danger">{{ qAskPx.toFixed(product.tickPrice) }}</th>
+          <th *ngIf="askStatus == 'Live'" class="text-danger">{{ qAskSz.toFixed(product.tickSize) }}<span *ngIf="!qAskSz">&nbsp;</span></th>
           <th *ngIf="askStatus != 'Live'" colspan="2" class="text-danger" title="Ask Quote Status">{{ askStatus }}</th>
         </tr>
       </table>
     <div *ngIf="levels != null" [ngClass]="(addr?'addr ':'')+'levels'">
       <table class="marketQuoting table table-hover table-responsive text-center" style="width:50%;float:left;">
-        <tr *ngIf="addr" class="skip">
-          <td><div class="text-danger text-center"><br /><br />To <a href="https://github.com/ctubio/Krypto-trading-bot/blob/master/README.md#unlock" target="_blank">unlock</a> all market levels<br />and to collaborate with the development..<br /><br />make an acceptable Pull Request on github,<br/>or send 0.01210000 BTC or more to:<br /><a href="https://live.blockcypher.com/btc/address/{{ addr }}" target="_blank">{{ addr }}</a><br /><br />Wait 0 confirmations and restart this bot.<br /><br /><!-- you can remove this message, but obviously the missing market levels will not be displayed magically. the market levels will be only displayed if the also displayed address is credited with 0.01210000 BTC. Note that if you make a Pull Request i will credit the payment for you easy, just let me know in the description of the PR what is the BTC Address displayed in your bot.--></div></td>
-        </tr>
-        <tr [ngClass]="orderPriceBids.indexOf(lvl.price.toFixed(product.fixedPrice))==-1?'active':'success buy'" *ngFor="let lvl of levels.bids; let i = index">
+        <tr [ngClass]="orderPriceBids.indexOf(lvl.price.toFixed(product.tickPrice))==-1?'active':'success buy'" *ngFor="let lvl of levels.bids; let i = index">
           <td>
             <div style="position:relative;" [ngClass]="'bids'+lvl.cssMod">
               <div class="bgSize" [ngStyle]="{'background': getBgSize(lvl, 'bids')}"></div>
-              {{ getSizeLevel(lvl.size | number:'1.'+product.fixedSize+'-'+product.fixedSize, true) }}<span class="truncated">{{ getSizeLevel(lvl.size | number:'1.'+product.fixedSize+'-'+product.fixedSize, false) }}</span>
+              {{ getSizeLevel(lvl.size.toFixed(product.tickSize), true) }}<span class="truncated">{{ getSizeLevel(lvl.size.toFixed(product.tickSize), false) }}</span>
             </div>
           </td>
           <td>
             <div [ngClass]="'bids'+(lvl.cssMod==2?2:0)">
-              {{ lvl.price | number:'1.'+product.fixedPrice+'-'+product.fixedPrice }}
+              {{ lvl.price.toFixed(product.tickPrice) }}
             </div>
           </td>
         </tr>
       </table>
       <table class="marketQuoting table table-hover table-responsive text-center" style="width:50%;">
-        <tr *ngIf="addr" style="height:0px;" class="skip"><td></td></tr>
-        <tr [ngClass]="orderPriceAsks.indexOf(lvl.price.toFixed(product.fixedPrice))==-1?'active':'success sell'" *ngFor="let lvl of levels.asks; let i = index">
+        <tr [ngClass]="orderPriceAsks.indexOf(lvl.price.toFixed(product.tickPrice))==-1?'active':'success sell'" *ngFor="let lvl of levels.asks; let i = index">
           <td>
             <div [ngClass]="'asks'+(lvl.cssMod==2?2:0)">
-              {{ lvl.price | number:'1.'+product.fixedPrice+'-'+product.fixedPrice }}
+              {{ lvl.price.toFixed(product.tickPrice) }}
             </div>
           </td>
           <td>
             <div style="position:relative;" [ngClass]="'asks'+lvl.cssMod">
               <div class="bgSize" [ngStyle]="{'background': getBgSize(lvl, 'asks')}"></div>
-              {{ getSizeLevel(lvl.size | number:'1.'+product.fixedSize+'-'+product.fixedSize, true) }}<span class="truncated">{{ getSizeLevel(lvl.size | number:'1.'+product.fixedSize+'-'+product.fixedSize, false) }}</span>
+              {{ getSizeLevel(lvl.size.toFixed(product.tickSize), true) }}<span class="truncated">{{ getSizeLevel(lvl.size.toFixed(product.tickSize), false) }}</span>
             </div>
           </td>
         </tr>
       </table>
     </div>
+    <table *ngIf="addr" class="table-responsive text-center" style="width:100%;"><tr><td><div class="text-danger text-center"><br /><br />To <a href="https://github.com/ctubio/Krypto-trading-bot/blob/master/README.md#unlock" target="_blank">unlock</a> realtime market levels,<br />and to collaborate with the development..<br /><br />make an acceptable <code>Pull Request</code> on github,<br/><br/>or send <code>0.01210000 BTC</code> or more to:<br /><a href="https://live.blockcypher.com/btc/address/{{ addr }}" target="_blank">{{ addr }}</a><br /><br />Wait 0 confirmations and restart this bot.</div></td></tr></table>
     </div>`
 })
 export class MarketQuotingComponent {
@@ -70,10 +67,10 @@ export class MarketQuotingComponent {
   public allAsksSize: number = 0;
   public dirtyBids: number = 0;
   public dirtyAsks: number = 0;
-  public qBidSz: number;
-  public qBidPx: number;
-  public qAskPx: number;
-  public qAskSz: number;
+  public qBidSz: number = 0;
+  public qBidPx: number = 0;
+  public qAskPx: number = 0;
+  public qAskSz: number = 0;
   public orderBids: any[];
   public orderAsks: any[];
   public orderPriceBids: number[] = [];
@@ -83,15 +80,15 @@ export class MarketQuotingComponent {
   public quotesInMemoryWaiting: number;
   public quotesInMemoryWorking: number;
   public quotesInMemoryZombies: number;
-  public marketWidth: number;
-  public ordersWidth: number;
+  public marketWidth: number = 0;
+  public ordersWidth: number = 0;
   public noBidReason: string;
   public noAskReason: string;
-  private targetBasePosition: number;
-  private positionDivergence: number;
+  private targetBasePosition: number = 0;
+  private positionDivergence: number = 0;
   private sideAPRSafety: string;
 
-  @Input() product: Models.ProductState;
+  @Input() product: Models.ProductAdvertisement;
 
   @Input() addr: string;
 
@@ -110,8 +107,8 @@ export class MarketQuotingComponent {
 
   @Input() set setTargetBasePosition(o: Models.TargetBasePositionValue) {
     if (o == null) {
-      this.targetBasePosition = null;
-      this.positionDivergence = null;
+      this.targetBasePosition = 0;
+      this.positionDivergence = 0;
     } else {
       this.targetBasePosition = o.tbp;
       this.positionDivergence = o.pDiv;
@@ -282,23 +279,23 @@ export class MarketQuotingComponent {
         price: o.price,
         quantity: o.quantity,
       });
-    this[orderPrice] = this[orderSide].map((a)=>a.price.toFixed(this.product.fixedPrice));
+    this[orderPrice] = this[orderSide].map((a)=>a.price.toFixed(this.product.tickPrice));
 
     if (this.orderBids.length) {
       var bid = this.orderBids.reduce((a,b)=>a.price>b.price?a:b);
       this.qBidPx = bid.price;
       this.qBidSz = bid.quantity;
     } else {
-      this.qBidPx = null;
-      this.qBidSz = null;
+      this.qBidPx = 0;
+      this.qBidSz = 0;
     }
     if (this.orderAsks.length) {
       var ask = this.orderAsks.reduce((a,b)=>a.price<b.price?a:b);
       this.qAskPx = ask.price;
       this.qAskSz = ask.quantity;
     } else {
-      this.qAskPx = null;
-      this.qAskSz = null;
+      this.qAskPx = 0;
+      this.qAskSz = 0;
     }
 
     this.ordersWidth = Math.max((this.qAskPx && this.qBidPx) ? this.qAskPx - this.qBidPx : 0, 0);

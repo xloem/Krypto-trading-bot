@@ -23,13 +23,13 @@ namespace ₿ {
   class Ansi {
     public:
       static int colorful;
-      static const string reset() {
+      static string reset() {
           return paint(0, -1);
       };
-      static const string r(const int &color) {
+      static string r(const int &color) {
           return paint(0, color);
       };
-      static const string b(const int &color) {
+      static string b(const int &color) {
           return paint(1, color);
       };
       static void default_colors() {
@@ -53,7 +53,7 @@ namespace ₿ {
         );
       };
     private:
-      static const string paint(const int &style, const int &color) {
+      static string paint(const int &style, const int &color) {
         return colorful
           ? "\033["
             + to_string(style)
@@ -88,7 +88,7 @@ namespace ₿ {
       static WINDOW *stdlog;
       static Margin margin;
       static void (*display)();
-      static const bool windowed() {
+      static bool windowed() {
         if (!display) return false;
         if (stdlog)
           error("SH", "Unable to print another window");
@@ -109,7 +109,7 @@ namespace ₿ {
           scrollok(stdlog, true);
           idlok(stdlog, true);
         }
-        signal(SIGWINCH, [](const int sig) {
+        signal(SIGWINCH, [](const int) {
           endwin();
           refresh();
           clear();
@@ -126,7 +126,7 @@ namespace ₿ {
           wrefresh(stdlog);
         }
       };
-      static const string stamp() {
+      static string stamp() {
         chrono::system_clock::time_point clock = chrono::system_clock::now();
         chrono::system_clock::duration t = clock.time_since_epoch();
         t -= chrono::duration_cast<chrono::seconds>(t);
@@ -155,7 +155,7 @@ namespace ₿ {
         return "";
       };
       static void log(const string &prefix, const string &reason, const string &highlight = "") {
-        unsigned int color = 0;
+        int color = 0;
         if (reason.find("NG TRADE") != string::npos) {
           if (reason.find("BUY") != string::npos)       color = 1;
           else if (reason.find("SELL") != string::npos) color = -1;
@@ -230,16 +230,13 @@ namespace ₿ {
 
   class Rollout {
     public:
-      void rollout(/* KMxTWEpb9ig */) {
-#ifdef NDEBUG
-        version();
-#else
-        static once_flag test_instance;
-        call_once(test_instance, version);
-#endif
+      Rollout(/* KMxTWEpb9ig */) {
+        static once_flag rollout;
+        call_once(rollout, version);
       };
     protected:
       static void version() {
+        curl_global_init(CURL_GLOBAL_ALL);
         clog << Ansi::b(COLOR_GREEN) << K_SOURCE
              << Ansi::r(COLOR_GREEN) << ' ' << K_BUILD << ' ' << K_STAMP << ".\n";
         const string mods = changelog();
@@ -255,7 +252,7 @@ namespace ₿ {
 #endif
             << ".\n" << Ansi::r(COLOR_YELLOW) << mods << Ansi::reset();
       };
-      static const string changelog() {
+      static string changelog() {
         string mods;
         const json diff =
 #ifdef NDEBUG
@@ -284,7 +281,7 @@ namespace ₿ {
       static vector<function<void()>> endingFn;
     public:
       Ending() {
-        signal(SIGINT, [](const int sig) {
+        signal(SIGINT, [](const int) {
           clog << '\n';
           raise(SIGQUIT);
         });
@@ -311,7 +308,7 @@ namespace ₿ {
              << Ansi::reset() << '\n';
         EXIT(code);
       };
-      static void die(const int sig) {
+      static void die(const int) {
         if (epilogue.empty())
           epilogue = "Excellent decision! "
                    + Curl::Web::xfer("https://api.icndb.com/jokes/random?escape=javascript&limitTo=[nerdy]", 4L)
@@ -322,7 +319,7 @@ namespace ₿ {
             : EXIT_FAILURE
         );
       };
-      static void err(const int sig) {
+      static void err(const int) {
         if (epilogue.empty()) epilogue = "Unknown error, no joke.";
         halt(EXIT_FAILURE);
       };
@@ -372,14 +369,14 @@ namespace ₿ {
          << string(epilogue.empty() ? 0 : 1, '\n');
   } };
 
-  struct Argument {
-   const string  name;
-   const string  defined_value;
-   const char   *default_value;
-   const string  help;
-  };
-
   class Option {
+    private_friend:
+      struct Argument {
+       const string  name;
+       const string  defined_value;
+       const char   *default_value;
+       const string  help;
+      };
     protected:
       bool autobot = false;
       pair<vector<Argument>, function<void(
@@ -446,13 +443,14 @@ namespace ₿ {
           {"maker-fee",    "AMOUNT", "0",      "set custom percentage of maker fee, like '0.1'"},
           {"taker-fee",    "AMOUNT", "0",      "set custom percentage of taker fee, like '0.1'"},
           {"min-size",     "AMOUNT", "0",      "set custom minimum order size, like '0.01'"},
+          {"leverage",     "AMOUNT", "1",      "set between '0.01' and '100' to enable isolated margin,"
+                                               "\n" "or use '0' for cross margin; default AMOUNT is '1'"},
           {"http",         "URL",    "",       "set URL of alernative HTTPS api endpoint for trading"},
           {"wss",          "URL",    "",       "set URL of alernative WSS api endpoint for trading"},
           {"fix",          "URL",    "",       "set URL of alernative FIX api endpoint for trading"},
           {"dustybot",     "1",      nullptr,  "do not automatically cancel all orders on exit"},
           {"market-limit", "NUMBER", "321",    "set NUMBER of maximum price levels for the orderbook,"
-                                               "\n" "default NUMBER is '321' and the minimum is '15'."
-                                               "\n" "locked bots smells like '--market-limit=3' spirit"}
+                                               "\n" "default NUMBER is '321' and the minimum is '15'"}
         }) long_options.push_back(it);
         for (const Argument &it : arguments.first)
           long_options.push_back(it);
@@ -462,7 +460,7 @@ namespace ₿ {
           {"debug",        "1",      nullptr,  "print detailed output about all the (previous) things!"},
           {"colors",       "1",      nullptr,  "print highlighted output"},
           {"title",        "WORD",   K_SOURCE, "set WORD to allow admins to identify different bots"},
-          {"free-version", "1",      nullptr,  "work with all market levels but slowdown 7 seconds"}
+          {"free-version", "1",      nullptr,  "slowdown market levels 7 seconds"}
         }) long_options.push_back(it);
         int index = ANY_NUM;
         vector<option> opt_long = { {nullptr, 0, nullptr, 0} };
@@ -492,9 +490,9 @@ namespace ₿ {
           switch (k = getopt_long(argc, argv, "hv", (option*)&opt_long[0], &index)) {
             case -1 :
             case  0 : break;
-            case 'h': help(long_options);
+            case 'h': help(long_options); [[fallthrough]];
             case '?':
-            case 'v': EXIT(EXIT_SUCCESS);
+            case 'v': EXIT(EXIT_SUCCESS);                                       //-V796
             default : {
               const string name(opt_long.at(index).name);
               if      (holds_alternative<int>(args[name]))    args[name] =   stoi(optarg);
@@ -543,6 +541,7 @@ namespace ₿ {
         args["base"]  = Text::strU(arg<string>("currency").substr(0, arg<string>("currency").find("/")));
         args["quote"] = Text::strU(arg<string>("currency").substr(1+ arg<string>("currency").find("/")));
         args["market-limit"] = max(15, arg<int>("market-limit"));
+        args["leverage"] = fmax(0, fmin(100, arg<double>("leverage")));
         if (arg<int>("debug"))
           args["debug-secret"] = 1;
         if (arg<int>("latency"))
@@ -682,15 +681,15 @@ namespace ₿ {
                                     MarketDataLongTerm   = 'H'
       };
     public:
-      virtual const mMatter about() const = 0;
-      const bool persist() const {
+      virtual mMatter about() const = 0;
+      bool persist() const {
         return about() == mMatter::QuotingParameters;
       };
   };
 
   class Blob: virtual public About {
     public:
-      virtual const json blob() const = 0;
+      virtual json blob() const = 0;
   };
 
   class Sqlite {
@@ -711,12 +710,12 @@ namespace ₿ {
           void backup() const {
             if (push) push();
           };
-          virtual const Report pull(const json &j) = 0;
-          virtual const string increment() const { return "NULL"; };
-          virtual const double limit()     const { return 0; };
-          virtual const Clock  lifetime()  const { return 0; };
+          virtual Report pull(const json &j) = 0;
+          virtual string increment() const { return "NULL"; };
+          virtual double limit()     const { return 0; };
+          virtual Clock  lifetime()  const { return 0; };
         protected:
-          const Report report(const bool &empty) const {
+          Report report(const bool &empty) const {
             string msg = empty
               ? explainKO()
               : explainOK();
@@ -726,19 +725,19 @@ namespace ₿ {
             return {empty, msg};
           };
         private:
-          virtual const string explain()   const = 0;
-          virtual       string explainOK() const = 0;
-          virtual       string explainKO() const { return ""; };
+          virtual string explain()   const = 0;
+          virtual string explainOK() const = 0;
+          virtual string explainKO() const { return ""; };
       };
       template <typename T> class StructBackup: public Backup {
         public:
           StructBackup(const Sqlite &sqlite)
             : Backup(sqlite)
           {};
-          const json blob() const override {
+          json blob() const override {
             return *(T*)this;
           };
-          const Report pull(const json &j) override {
+          Report pull(const json &j) override {
             from_json(j.empty() ? blob() : j.at(0), *(T*)this);
             return report(j.empty());
           };
@@ -784,16 +783,16 @@ namespace ₿ {
             backup();
             erase();
           };
-          const Report pull(const json &j) override {
+          Report pull(const json &j) override {
             for (const json &it : j)
               rows.push_back(it);
             return report(empty());
           };
-          const json blob() const override {
+          json blob() const override {
             return back();
           };
         private:
-          const string explain() const override {
+          string explain() const override {
             return to_string(size());
           };
       };
@@ -834,7 +833,7 @@ namespace ₿ {
           Print::logWar("DB", note.second);
         else Print::log("DB", note.second);
       };
-      const json select(Backup *const data) {
+      json select(Backup *const data) {
         const string table = schema(data);
         json result = json::array();
         exec(
@@ -866,20 +865,20 @@ namespace ₿ {
         );
         exec(sql);
       };
-      const string schema(Backup *const data) const {
+      string schema(Backup *const data) const {
         return (
           data->persist()
             ? disk
             : "main"
         ) + "." + (char)data->about();
       };
-      const string create(const string &table) const {
+      string create(const string &table) const {
         return "CREATE TABLE IF NOT EXISTS " + table + "("
           + "id    INTEGER   PRIMARY KEY AUTOINCREMENT                                           NOT NULL,"
           + "json  BLOB                                                                          NOT NULL,"
           + "time  TIMESTAMP DEFAULT (CAST((julianday('now') - 2440587.5)*86400000 AS INTEGER))  NOT NULL);";
       };
-      const string truncate(const string &table, const Clock &lifetime) const {
+      string truncate(const string &table, const Clock &lifetime) const {
         return lifetime
           ? "DELETE FROM " + table + " WHERE time < " + to_string(Tstamp - lifetime) + ";"
           : "";
@@ -890,7 +889,7 @@ namespace ₿ {
         if (zErrMsg) Print::logWar("DB", "SQLite error: " + (zErrMsg + (" at " + sql)));
         sqlite3_free(zErrMsg);
       };
-      static int write(void *result, int argc, char **argv, char **azColName) {
+      static int write(void *result, int argc, char **argv, char**) {
         for (int i = 0; i < argc; ++i)
           ((json*)result)->push_back(json::parse(argv[i]));
         return 0;
@@ -911,10 +910,10 @@ namespace ₿ {
           {
             client.readable.push_back(this);
           };
-          virtual const json hello() {
+          virtual json hello() {
             return { blob() };
           };
-          virtual const bool realtime() const {
+          virtual bool realtime() const {
             return true;
           };
       };
@@ -923,7 +922,7 @@ namespace ₿ {
           Broadcast(const Client &client)
             : Readable(client)
           {};
-          const bool broadcast() {
+          bool broadcast() {
             if ((read_asap() or read_soon())
               and (read_same_blob() or diff_blob())
             ) {
@@ -932,23 +931,23 @@ namespace ₿ {
             }
             return false;
           };
-          const json blob() const override {
+          json blob() const override {
             return *(T*)this;
           };
         protected:
           Clock last_Tstamp = 0;
           string last_blob;
-          virtual const bool read_same_blob() const {
+          virtual bool read_same_blob() const {
             return true;
           };
-          const bool diff_blob() {
+          bool diff_blob() {
             const string last = last_blob;
             return (last_blob = blob().dump()) != last;
           };
-          virtual const bool read_asap() const {
+          virtual bool read_asap() const {
             return true;
           };
-          const bool read_soon(const int &delay = 0) {
+          bool read_soon(const int &delay = 0) {
             const Clock now = Tstamp;
             if (last_Tstamp + max(369, delay) > now)
               return false;
@@ -977,7 +976,7 @@ namespace ₿ {
                   client.clicked(
                     it.first,
                     holds_alternative<const function<void()>>(it.second)
-                      ? [it](const json &j) { get<const function<void()>>(it.second)(); }
+                      ? [it](const json&) { get<const function<void()>>(it.second)(); }
                       : get<const function<void(const json&)>>(it.second)
                   );
               };
@@ -996,7 +995,7 @@ namespace ₿ {
       mutable vector<Clickable*> clickable;
       mutable unordered_map<const Clickable*, vector<function<void(const json&)>>> clickFn;
       const pair<char, char> portal = {'=', '-'};
-      unordered_map<char, function<const json()>> hello;
+      unordered_map<char, function<json()>> hello;
       unordered_map<char, function<void(const json&)>> kisses;
       unordered_map<char, string> queue;
     public:
@@ -1009,9 +1008,9 @@ namespace ₿ {
           option->arg<int>("ipv6"),
           {
             option->arg<string>("B64auth"),
-            httpUpgrade,
-            httpResponse,
-            httpMessage
+            response,
+            upgrade,
+            message
           }
         )) error("UI", "Unable to listen at port number " + to_string(option->arg<int>("port"))
              + " (may be already in use by another program)");
@@ -1069,10 +1068,11 @@ namespace ₿ {
       };
       void broadcast() {
         if (queue.empty()) return;
-        server.broadcast(portal.second, queue);
+        if (!server.idle())
+          server.broadcast(portal.second, queue);
         queue.clear();
       };
-      const bool alien(const string &addr) {
+      bool alien(const string &addr) {
         if (addr != "unknown"
           and !option->arg<string>("whitelist").empty()
           and option->arg<string>("whitelist").find(addr) == string::npos
@@ -1082,17 +1082,7 @@ namespace ₿ {
         }
         return false;
       };
-      function<const int(const int&, const string&)> httpUpgrade = [&](const int &sum, const string &addr) {
-        const int tentative = server.clients() + sum;
-        Print::log("UI", to_string(tentative) + " client" + string(tentative == 1 ? 0 : 1, 's')
-          + (sum > 0 ? "" : " remain") + " connected, last connection was from", addr);
-        if (tentative > option->arg<int>("client-limit")) {
-          Print::log("UI", "--client-limit=" + to_string(option->arg<int>("client-limit")) + " reached by", addr);
-          return 0;
-        }
-        return sum;
-      };
-      function<const string(string, const string&, const string&)> httpResponse = [&](string path, const string &auth, const string &addr) {
+      WebServer::Response response = [&](string path, const string &auth, const string &addr) {
         if (alien(addr))
           path.clear();
         const bool papersplease = !(path.empty() or option->arg<string>("B64auth").empty());
@@ -1126,26 +1116,38 @@ namespace ₿ {
               code = 418, content = "Today, is your lucky day!";
           }
         } else {
-          Print::log("UI", "--client-limit=" + to_string(option->arg<int>("client-limit")) + " reached by", addr);
+          Print::log("UI", "--client-limit=" + to_string(option->arg<int>("client-limit"))
+            + " reached by", addr);
           content = "Thank you! but our princess is already in this castle!"
                     "<br/>" "Refresh the page anytime to retry.";
         }
         return server.document(content, code, type);
       };
-      function<const string(string, const string&)> httpMessage = [&](string message, const string &addr) {
+      WebServer::Upgrade upgrade = [&](const int &sum, const string &addr) {
+        const int tentative = server.clients() + sum;
+        Print::log("UI", to_string(tentative) + " client" + string(tentative == 1 ? 0 : 1, 's')
+          + (sum > 0 ? "" : " remain") + " connected, last connection was from", addr);
+        if (tentative > option->arg<int>("client-limit")) {
+          Print::log("UI", "--client-limit=" + to_string(option->arg<int>("client-limit"))
+            + " reached by", addr);
+          return 0;
+        }
+        return sum;
+      };
+      WebServer::Message message = [&](string msg, const string &addr) {
         if (alien(addr))
           return string(documents.at("").first, documents.at("").second);
-        const char matter = message.at(1);
-        if (portal.first == message.at(0)) {
+        const char matter = msg.at(1);
+        if (portal.first == msg.at(0)) {
           if (hello.find(matter) != hello.end()) {
             const json reply = hello.at(matter)();
             if (!reply.is_null())
               return portal.first + (matter + reply.dump());
           }
-        } else if (portal.second == message.at(0) and kisses.find(matter) != kisses.end()) {
-          message = message.substr(2);
-          json butterfly = json::accept(message)
-            ? json::parse(message)
+        } else if (portal.second == msg.at(0) and kisses.find(matter) != kisses.end()) {
+          msg = msg.substr(2);
+          json butterfly = json::accept(msg)
+            ? json::parse(msg)
             : json::object();
           for (auto it = butterfly.begin(); it != butterfly.end();)
             if (it.value().is_null()) it = butterfly.erase(it); else ++it;
@@ -1181,10 +1183,8 @@ namespace ₿ {
     public:
       Gw *gateway = nullptr;
     public:
-      KryptoNinja *const main(int argc, char** argv) {
+      KryptoNinja *main(int argc, char** argv) {
         {
-          curl_global_init(CURL_GLOBAL_ALL);
-          rollout();
           Option::main(argc, argv, databases, documents.empty());
           setup();
         } {
@@ -1215,7 +1215,6 @@ namespace ₿ {
           ending([&]() {
             gateway->end(arg<int>("dustybot"));
             end();
-            curl_global_cleanup();
           });
           handshake({
             {"gateway", gateway->http      },
@@ -1244,6 +1243,12 @@ namespace ₿ {
             });
             welcome();
           }
+        } {
+          ending([&]() {
+            curl_global_cleanup();
+            if (!arg<int>("free-version"))
+              gateway->disclaimer();
+          });
         }
         return this;
       };
@@ -1261,7 +1266,7 @@ namespace ₿ {
             + ", possible error message: " + reply.dump());
         gateway->report(notes, arg<int>("nocache"));
       };
-      const unsigned int memSize() const {
+      unsigned int memSize() const {
 #ifdef _WIN32
         return 0;
 #else
@@ -1269,7 +1274,7 @@ namespace ₿ {
         return getrusage(RUSAGE_SELF, &ru) ? 0 : ru.ru_maxrss * 1e+3;
 #endif
       };
-      const unsigned int dbSize() const {
+      unsigned int dbSize() const {
         if (!databases or arg<string>("database") == ":memory:") return 0;
         struct stat st;
         return stat(arg<string>("database").data(), &st) ? 0 : st.st_size;
@@ -1282,7 +1287,7 @@ namespace ₿ {
               + arg<string>("exchange") + " argument"
           );
         epitaph = "- exchange: " + (gateway->exchange = arg<string>("exchange")) + '\n'
-                + "- currency: " + (gateway->base     = arg<string>("base"))     + " .. "
+                + "- currency: " + (gateway->base     = arg<string>("base"))     + "/"
                                  + (gateway->quote    = arg<string>("quote"))    + '\n';
         if (!gateway->http.empty() and !arg<string>("http").empty())
           gateway->http    = arg<string>("http");
@@ -1296,12 +1301,12 @@ namespace ₿ {
           gateway->makeFee = arg<double>("maker-fee") / 1e+2;
         if (arg<double>("min-size"))
           gateway->minSize = arg<double>("min-size");
+        gateway->leverage  = arg<double>("leverage");
         gateway->apikey    = arg<string>("apikey");
         gateway->secret    = arg<string>("secret");
         gateway->pass      = arg<string>("passphrase");
         gateway->maxLevel  = arg<int>("market-limit");
         gateway->debug     = arg<int>("debug-secret");
-        gateway->version   = arg<int>("free-version");
         gateway->loopfd    = poll();
         gateway->printer   = [&](const string &prefix, const string &reason, const string &highlight) {
           if (reason.find("Error") != string::npos)

@@ -7,6 +7,9 @@ namespace ₿ {
   enum class mQuotingMode: unsigned int {
     Top, Mid, Join, InverseJoin, InverseTop, HamelinRat, Depth
   };
+  enum class mOrderPctTotal: unsigned int {
+    Value, Side, TBPValue, TBPSide
+  };
   enum class mQuotingSafety: unsigned int {
     Off, PingPong, PingPoing, Boomerang, AK47
   };
@@ -58,6 +61,8 @@ namespace ₿ {
     bool              widthPercentage                 = false;
     bool              bestWidth                       = true;
     Amount            bestWidthSize                   = 0;
+    mOrderPctTotal    orderPctTotal                   = mOrderPctTotal::Value;
+    double            tradeSizeTBPExp                 = 2.0;
     Amount            buySize                         = 0.02;
     double            buySizePercentage               = 7.0;
     bool              buySizeMax                      = false;
@@ -140,6 +145,8 @@ namespace ₿ {
         widthPercentage                 =                            j.value("widthPercentage", widthPercentage);
         bestWidth                       =                            j.value("bestWidth", bestWidth);
         bestWidthSize                   = fmax(0,                    j.value("bestWidthSize", bestWidthSize));
+        orderPctTotal                   =                            j.value("orderPctTotal", orderPctTotal);
+        tradeSizeTBPExp                 =                            j.value("tradeSizeTBPExp", tradeSizeTBPExp);
         buySize                         = fmax(K.gateway->minSize,   j.value("buySize", buySize));
         buySizePercentage               = fmin(1e+2, fmax(1e-3,      j.value("buySizePercentage", buySizePercentage)));
         buySizeMax                      =                            j.value("buySizeMax", buySizeMax);
@@ -218,11 +225,11 @@ namespace ₿ {
         backup();
         broadcast();
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::QuotingParameters;
       };
     private:
-      const string explain() const override {
+      string explain() const override {
         return "Quoting Parameters";
       };
       string explainKO() const override {
@@ -238,6 +245,8 @@ namespace ₿ {
       {                "widthPercentage", k.widthPercentage                },
       {                      "bestWidth", k.bestWidth                      },
       {                  "bestWidthSize", k.bestWidthSize                  },
+      {                  "orderPctTotal", k.orderPctTotal                  },
+      {                "tradeSizeTBPExp", k.tradeSizeTBPExp                },
       {                        "buySize", k.buySize                        },
       {              "buySizePercentage", k.buySizePercentage              },
       {                     "buySizeMax", k.buySizeMax                     },
@@ -309,7 +318,7 @@ namespace ₿ {
   struct mOrders: public Client::Broadcast<mOrders> {
     mLastOrder updated;
     private:
-      unordered_map<RandId, mOrder> orders;
+      unordered_map<string, mOrder> orders;
     private_ref:
       const KryptoNinja &K;
     public:
@@ -318,13 +327,13 @@ namespace ₿ {
         , updated()
         , K(bot)
       {};
-      mOrder *const find(const RandId &orderId) {
+      mOrder *find(const string &orderId) {
         return (orderId.empty()
           or orders.find(orderId) == orders.end()
         ) ? nullptr
           : &orders.at(orderId);
       };
-      mOrder *const findsert(const mOrder &raw) {
+      mOrder *findsert(const mOrder &raw) {
         if ((raw.status == Status::WaitingToWork or
              raw.status == Status::WaitingToTerminate)
             and !raw.orderId.empty())
@@ -332,7 +341,7 @@ namespace ₿ {
         if (raw.orderId.empty() and !raw.exchangeId.empty()) {
           auto it = find_if(
             orders.begin(), orders.end(),
-            [&](const pair<RandId, mOrder> &it_) {
+            [&](const pair<string, mOrder> &it_) {
               return raw.exchangeId == it_.second.exchangeId;
             }
           );
@@ -341,7 +350,7 @@ namespace ₿ {
         }
         return find(raw.orderId);
       };
-      const Amount heldAmount(const Side &side) const {
+      Amount heldAmount(const Side &side) const {
         Amount held = 0;
         for (const auto &it : orders)
           if (it.second.side == side)
@@ -364,14 +373,14 @@ namespace ₿ {
             : *filterAskOrders
           )[it.second.price] += it.second.quantity;
       };
-      const vector<mOrder*> at(const Side &side) {
+      vector<mOrder*> at(const Side &side) {
         vector<mOrder*> sideOrders;
         for (auto &it : orders)
           if (side == it.second.side)
              sideOrders.push_back(&it.second);
         return sideOrders;
       };
-      const vector<mOrder*> working() {
+      vector<mOrder*> working() {
         vector<mOrder*> workingOrders;
         for (auto &it : orders)
           if (Status::Working == it.second.status
@@ -379,7 +388,7 @@ namespace ₿ {
           ) workingOrders.push_back(&it.second);
         return workingOrders;
       };
-      const vector<mOrder> working(const bool &sorted = false) const {
+      vector<mOrder> working(const bool &sorted = false) const {
         vector<mOrder> workingOrders;
         for (const auto &it : orders)
           if (Status::Working == it.second.status)
@@ -392,7 +401,7 @@ namespace ₿ {
           );
         return workingOrders;
       };
-      mOrder *const upsert(const mOrder &raw) {
+      mOrder *upsert(const mOrder &raw) {
         mOrder *const order = findsert(raw);
         mOrder::update(raw, order);
         if (K.arg<int>("debug-orders")) {
@@ -416,14 +425,14 @@ namespace ₿ {
         }
         return order;
       };
-      const bool replace(const Price &price, const bool &isPong, mOrder *const order) {
+      bool replace(const Price &price, const bool &isPong, mOrder *const order) {
         const bool allowed = mOrder::replace(price, isPong, order);
-        if (K.arg<int>("debug-orders")) report(order, "replace");
+        if (allowed and K.arg<int>("debug-orders")) report(order, "replace");
         return allowed;
       };
-      const bool cancel(mOrder *const order) {
+      bool cancel(mOrder *const order) {
         const bool allowed = mOrder::cancel(order);
-        if (K.arg<int>("debug-orders")) report(order, "cancel ");
+        if (allowed and K.arg<int>("debug-orders")) report(order, "cancel ");
         return allowed;
       };
       void purge(const mOrder *const order) {
@@ -450,13 +459,13 @@ namespace ₿ {
         broadcast();
         Print::repaint();
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::OrderStatusReports;
       };
-      const bool realtime() const override {
+      bool realtime() const override {
         return false;
       };
-      const json blob() const override {
+      json blob() const override {
         return working();
       };
     private:
@@ -464,7 +473,7 @@ namespace ₿ {
         Print::log("DEBUG OG", " " + reason + " " + (
           order
             ? order->orderId + "::" + order->exchangeId
-              + " [" + to_string((int)order->status) + "]: "
+              + " [" + to_string((int)order->status) + "/" + (order->side == Side::Bid ? "B" : "S") + "]: "
               + K.gateway->decimal.amount.str(order->quantity) + " " + K.gateway->base + " at price "
               + K.gateway->decimal.price.str(order->price) + " " + K.gateway->quote
             : "not found"
@@ -499,18 +508,15 @@ namespace ₿ {
         trades.push_back(raw);
         broadcast();
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::MarketTrade;
       };
-      const json blob() const override {
+      json blob() const override {
         return trades.back();
       };
-      const json hello() override {
+      json hello() override {
         return trades;
       };
-  };
-  static void to_json(json &j, const mMarketTakers &k) {
-    j = k.trades;
   };
 
   struct mFairLevelsPrice: public Client::Broadcast<mFairLevelsPrice> {
@@ -521,19 +527,19 @@ namespace ₿ {
         : Broadcast(bot)
         , fairValue(f)
       {};
-      const Price currentPrice() const {
+      Price currentPrice() const {
         return fairValue;
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::FairValue;
       };
-      const bool realtime() const override {
+      bool realtime() const override {
         return false;
       };
-      const bool read_same_blob() const override {
+      bool read_same_blob() const override {
         return false;
       };
-      const bool read_asap() const override {
+      bool read_asap() const override {
         return false;
       };
   };
@@ -586,13 +592,13 @@ namespace ₿ {
         ask  = calc(&askMean, "ask");
         top  = calc(&topMean, "top");
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::STDEVStats;
       };
-      const double limit() const override {
+      double limit() const override {
         return qp.quotingStdevProtectionPeriods;
       };
-      const Clock lifetime() const override {
+      Clock lifetime() const override {
         return 1e+3 * limit();
       };
     private:
@@ -647,13 +653,13 @@ namespace ₿ {
       mFairHistory(const KryptoNinja &bot)
         : VectorBackup(bot)
       {};
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::MarketDataLongTerm;
       };
-      const double limit() const override {
+      double limit() const override {
         return 5760;
       };
-      const Clock lifetime() const override {
+      Clock lifetime() const override {
         return 60e+3 * limit();
       };
     private:
@@ -695,10 +701,10 @@ namespace ₿ {
         calcTargetPositionAutoPercentage();
         backup();
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::EWMAStats;
       };
-      const Clock lifetime() const override {
+      Clock lifetime() const override {
         return 60e+3 * max(qp.veryLongEwmaPeriods,
                        max(qp.longEwmaPeriods,
                        max(qp.mediumEwmaPeriods,
@@ -765,7 +771,7 @@ namespace ₿ {
         }
         targetPositionAutoPercentage = ((1 + max(-1.0, min(1.0, targetPosition))) / 2) * 1e+2;
       };
-      const string explain() const override {
+      string explain() const override {
         return "EWMA Values";
       };
       string explainKO() const override {
@@ -806,10 +812,10 @@ namespace ₿ {
       , fairPrice(bot, f)
       , takerTrades(bot)
     {};
-    const mMatter about() const override {
+    mMatter about() const override {
       return mMatter::MarketChart;
     };
-    const bool realtime() const override {
+    bool realtime() const override {
       return false;
     };
   };
@@ -835,7 +841,7 @@ namespace ₿ {
         , unfiltered(u)
         , qp(q)
       {};
-      const bool empty() const {
+      bool empty() const {
         return patched
           ? bids.empty() and asks.empty()
           : bids.empty() or asks.empty();
@@ -846,15 +852,15 @@ namespace ₿ {
         if (!empty() and read) read();
         unfilter();
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::MarketData;
       };
-      const json hello() override {
+      json hello() override {
         unfilter();
         return Broadcast::hello();
       };
     private:
-      const bool ratelimit() {
+      bool ratelimit() {
         return unfiltered.bids.empty() or unfiltered.asks.empty() or empty()
           or !read_soon(qp.delayUI * 1e+3);
       };
@@ -917,7 +923,7 @@ namespace ₿ {
         , qp(q)
         , orders(o)
       {};
-      const bool warn_empty() const {
+      bool warn_empty() const {
         const bool err = bids.empty() or asks.empty();
         if (err and (float)clock()/CLOCKS_PER_SEC > 3.0)
           Print::logWar("QE", "Unable to calculate quote, missing market data");
@@ -931,7 +937,7 @@ namespace ₿ {
         stats.ewma.timer_60s(resetAverageWidth());
         stats.broadcast();
       };
-      const Price calcQuotesWidth(bool *const superSpread) const {
+      Price calcQuotesWidth(bool *const superSpread) const {
         const Price widthPing = fmax(
           qp.widthPercentage
             ? qp.widthPingPercentage * fairValue / 100
@@ -947,7 +953,7 @@ namespace ₿ {
         bids.clear();
         asks.clear();
       };
-      const bool ready() {
+      bool ready() {
         filter();
         return !(bids.empty() or asks.empty());
       };
@@ -975,7 +981,7 @@ namespace ₿ {
         );
         averageWidth /= ++averageCount;
       };
-      const Price resetAverageWidth() {
+      Price resetAverageWidth() {
         averageCount = 0;
         return averageWidth;
       };
@@ -1002,7 +1008,7 @@ namespace ₿ {
         if (fairValue)
           fairValue = K.gateway->decimal.price.round(fairValue);
       };
-      const vector<mLevel> filter(vector<mLevel> levels, unordered_map<Price, Amount> *const filterOrders) {
+      vector<mLevel> filter(vector<mLevel> levels, unordered_map<Price, Amount> *const filterOrders) {
         if (!filterOrders->empty())
           for (auto it = levels.begin(); it != levels.end();) {
             for (auto it_ = filterOrders->begin(); it_ != filterOrders->end();)
@@ -1046,25 +1052,25 @@ namespace ₿ {
         , K(bot)
         , qp(q)
       {};
-      const bool ratelimit() const {
+      bool ratelimit() const {
         return !empty() and crbegin()->time + 21e+3 > Tstamp;
       };
-      const double calcBaseDiff() const {
+      double calcBaseDiff() const {
         return calcDiffPercent(
           cbegin()->baseValue,
           crbegin()->baseValue
         );
       };
-      const double calcQuoteDiff() const {
+      double calcQuoteDiff() const {
         return calcDiffPercent(
           cbegin()->quoteValue,
           crbegin()->quoteValue
         );
       };
-      const double calcDiffPercent(Amount older, Amount newer) const {
+      double calcDiffPercent(Amount older, Amount newer) const {
         return K.gateway->decimal.percent.round(((newer - older) / newer) * 1e+2);
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::Profit;
       };
       void erase() override {
@@ -1073,10 +1079,10 @@ namespace ₿ {
           if (it->time + lifetime() > now) ++it;
           else it = rows.erase(it);
       };
-      const double limit() const override {
+      double limit() const override {
         return qp.profitHourInterval;
       };
-      const Clock lifetime() const override {
+      Clock lifetime() const override {
         return 3600e+3 * limit();
       };
     private:
@@ -1147,7 +1153,7 @@ namespace ₿ {
           K.clicked(this, order);
         }
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::SubmitNewOrder;
       };
   };
@@ -1161,9 +1167,9 @@ namespace ₿ {
       {};
       void click(const json &j) override {
         if ((j.is_object() and !j.value("orderId", "").empty()))
-          K.clicked(this, j.at("orderId").get<RandId>());
+          K.clicked(this, j.at("orderId").get<string>());
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::CancelOrder;
       };
   };
@@ -1175,10 +1181,10 @@ namespace ₿ {
         : Clickable(bot)
         , K(bot)
       {};
-      void click(const json &j) override {
+      void click(const json&) override {
         K.clicked(this);
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::CancelAllOrders;
       };
   };
@@ -1190,10 +1196,10 @@ namespace ₿ {
         : Clickable(bot)
         , K(bot)
       {};
-      void click(const json &j) override {
+      void click(const json&) override {
         K.clicked(this);
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::CleanAllClosedTrades;
       };
   };
@@ -1205,10 +1211,10 @@ namespace ₿ {
         : Clickable(bot)
         , K(bot)
       {};
-      void click(const json &j) override {
+      void click(const json&) override {
         K.clicked(this);
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::CleanAllTrades;
       };
   };
@@ -1224,7 +1230,7 @@ namespace ₿ {
         if ((j.is_object() and !j.value("tradeId", "").empty()))
           K.clicked(this, j.at("tradeId").get<string>());
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::CleanTrade;
       };
   };
@@ -1241,7 +1247,7 @@ namespace ₿ {
         if (j.is_array() and j.size() and j.at(0).is_string())
          content = j.at(0);
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::Notepad;
       };
   };
@@ -1333,27 +1339,27 @@ namespace ₿ {
         if (qp.cleanPongsAuto)
           clearPongsAuto();
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::Trades;
       };
       void erase() override {
         if (crbegin()->Kqty < 0) rows.pop_back();
       };
-      const json blob() const override {
+      json blob() const override {
         if (crbegin()->Kqty == -1) return nullptr;
         else return VectorBackup::blob();
       };
-      const string increment() const override {
+      string increment() const override {
         return crbegin()->tradeId;
       };
-      const json hello() override {
+      json hello() override {
         for (mOrderFilled &it : rows)
           it.loadedFromDB = true;
         return rows;
       };
     private:
       void clearAll() {
-        clear_if([](iterator it) {
+        clear_if([](iterator) {
           return true;
         });
       };
@@ -1377,7 +1383,7 @@ namespace ₿ {
           );
         });
       };
-      void clear_if(const function<const bool(iterator)> &fn, const bool &onlyOne = false) {
+      void clear_if(const function<bool(iterator)> &fn, const bool &onlyOne = false) {
         for (auto it = begin(); it != end();)
           if (fn(it)) {
             it->Kqty = -1;
@@ -1481,14 +1487,14 @@ namespace ₿ {
       ));
     };
     void expire() {
-      if (buys.size()) expire(&buys);
-      if (sells.size()) expire(&sells);
+      if (!buys.empty()) expire(&buys);
+      if (!sells.empty()) expire(&sells);
       skip();
       sumBuys = sum(&buys);
       sumSells = sum(&sells);
     };
     private:
-      const Amount sum(multimap<Price, mRecentTrade> *const k) const {
+      Amount sum(multimap<Price, mRecentTrade> *const k) const {
         Amount sum = 0;
         for (const auto &it : *k)
           sum += it.second.quantity;
@@ -1501,7 +1507,7 @@ namespace ₿ {
           else it = k->erase(it);
       };
       void skip() {
-        while (buys.size() and sells.size()) {
+        while (!(buys.empty() or sells.empty())) {
           mRecentTrade &buy = buys.rbegin()->second;
           mRecentTrade &sell = sells.begin()->second;
           if (sell.price < buy.price) break;
@@ -1528,20 +1534,20 @@ namespace ₿ {
        mRecentTrades recentTrades;
     private_ref:
       const mQuotingParams &qp;
+      const mWallet        &base;
       const Price          &fairValue;
-      const Amount         &baseValue,
-                           &baseTotal,
-                           &targetBasePosition;
+      const Amount         &targetBasePosition;
+      const Amount         &positionDivergence;
     public:
-      mSafety(const KryptoNinja &bot, const mQuotingParams &q, const mButtons &b, const Price &f, const Amount &v, const Amount &t, const Amount &p)
+      mSafety(const KryptoNinja &bot, const mQuotingParams &q, const mWallet &w, const mButtons &b, const Price &f, const Amount &t, const Amount &p)
         : Broadcast(bot)
         , trades(bot, q, b)
         , recentTrades(q)
         , qp(q)
+        , base(w)
         , fairValue(f)
-        , baseValue(v)
-        , baseTotal(t)
-        , targetBasePosition(p)
+        , targetBasePosition(t)
+        , positionDivergence(p)
       {};
       void timer_1s() {
         calc();
@@ -1552,7 +1558,7 @@ namespace ₿ {
         calc();
       };
       void calc() {
-        if (!baseValue or !fairValue) return;
+        if (!base.value or !fairValue) return;
         calcSizes();
         calcPrices();
         recentTrades.expire();
@@ -1562,28 +1568,61 @@ namespace ₿ {
         combined = (recentTrades.sumBuys + recentTrades.sumSells) / (buySize + sellSize);
         broadcast();
       };
-      const bool empty() const {
-        return !baseValue or !buySize or !sellSize;
+      bool empty() const {
+        return !base.value or !buySize or !sellSize;
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::TradeSafetyValue;
       };
-      const bool read_same_blob() const override {
+      bool read_same_blob() const override {
         return false;
       };
     private:
       void calcSizes() {
-        sellSize = qp.percentageValues
-            ? qp.sellSizePercentage * baseValue / 1e+2
-            : qp.sellSize;
-        buySize = qp.percentageValues
-          ? qp.buySizePercentage * baseValue / 1e+2
-          : qp.buySize;
+        if (qp.percentageValues) {
+          sellSize = qp.sellSizePercentage / 1e+2;
+          buySize  = qp.buySizePercentage / 1e+2;
+          const Amount pdivMin = fmax(0, targetBasePosition - positionDivergence),
+                       pdivMax = fmin(base.value, targetBasePosition + positionDivergence);
+          if (qp.orderPctTotal == mOrderPctTotal::Side) {
+            sellSize *= base.total;
+            buySize  *= base.value - base.total;
+          } else {
+            if (qp.orderPctTotal == mOrderPctTotal::TBPSide) {
+              sellSize *= pow((base.total - pdivMin) / (base.value - pdivMin), qp.tradeSizeTBPExp);
+              buySize  *= pow((pdivMax - base.total) / pdivMax, qp.tradeSizeTBPExp);
+            }
+            sellSize *= base.value;
+            buySize  *= base.value;
+            if (qp.orderPctTotal == mOrderPctTotal::TBPSide
+              or qp.orderPctTotal == mOrderPctTotal::TBPValue
+            ) {
+              const double exp = qp.orderPctTotal == mOrderPctTotal::TBPValue
+                               ? 1.0
+                               : qp.tradeSizeTBPExp;
+              if (targetBasePosition * 2 < base.value)
+                buySize *= pow(
+                  (targetBasePosition - pdivMin) * pdivMax / ((base.value - pdivMin) * (pdivMax - targetBasePosition)),
+                  exp
+                );
+              else
+                sellSize *= pow(
+                  (base.value - pdivMin) * (pdivMax - targetBasePosition) / ((targetBasePosition - pdivMin) * pdivMax),
+                  exp
+                );
+            }
+          }
+          sellSize = fmax(0.0, sellSize);
+          buySize  = fmax(0.0, buySize);
+        } else {
+          sellSize = qp.sellSize;
+          buySize  = qp.buySize;
+        }
         if (qp.aggressivePositionRebalancing == mAPR::Off) return;
         if (qp.buySizeMax)
-          buySize = fmax(buySize, targetBasePosition - baseTotal);
+          buySize = fmax(buySize, targetBasePosition - base.total);
         if (qp.sellSizeMax)
-          sellSize = fmax(sellSize, baseTotal - targetBasePosition);
+          sellSize = fmax(sellSize, base.total - targetBasePosition);
       };
       void calcPrices() {
         if (qp.safety == mQuotingSafety::PingPong) {
@@ -1645,7 +1684,7 @@ namespace ₿ {
           if (matchPing(_near, _far, ping, qty, qtyMax, width, dir * fairValue, dir * it.second.price, it.second.quantity, it.second.price, it.second.Kqty, reverse))
             break;
       };
-      const bool matchPing(bool _near, bool _far, Price *ping, Amount *qty, Amount qtyMax, Price width, Price fv, Price price, Amount qtyTrade, Price priceTrade, Amount KqtyTrade, bool reverse) {
+      bool matchPing(bool _near, bool _far, Price *ping, Amount *qty, Amount qtyMax, Price width, Price fv, Price price, Amount qtyTrade, Price priceTrade, Amount KqtyTrade, bool reverse) {
         if (reverse) { fv *= -1; price *= -1; width *= -1; }
         if (((!_near and !_far) or *qty < qtyMax)
           and (_far ? fv > price : true)
@@ -1691,7 +1730,7 @@ namespace ₿ {
       {};
       void calcTargetBasePos() {
         if (warn_empty()) return;
-        targetBasePosition = K.gateway->decimal.amount.round(
+        targetBasePosition = K.gateway->decimal.funds.round(
           qp.autoPositionMode == mAutoPositionMode::Manual
             ? (qp.percentageValues
               ? qp.targetBasePositionPercentage * baseValue / 1e+2
@@ -1719,22 +1758,22 @@ namespace ₿ {
           if (K.arg<int>("debug-wallet")) report();
         }
       };
-      const bool warn_empty() const {
+      bool warn_empty() const {
         const bool err = empty();
         if (err and (float)clock()/CLOCKS_PER_SEC > 3.0)
           Print::logWar("PG", "Unable to calculate TBP, missing wallet data");
         return err;
       };
-      const bool empty() const {
+      bool empty() const {
         return !baseValue;
       };
-      const bool realtime() const override {
+      bool realtime() const override {
         return false;
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::TargetBasePosition;
       };
-      const bool read_same_blob() const override {
+      bool read_same_blob() const override {
         return false;
       };
     private:
@@ -1754,16 +1793,16 @@ namespace ₿ {
           else if (mPDivMode::SQRT == qp.positionDivergenceMode)   positionDivergence = pDivMin + (sqrt(divCenter) * (pDiv - pDivMin));
           else if (mPDivMode::Switch == qp.positionDivergenceMode) positionDivergence = divCenter < 1e-1 ? pDivMin : pDiv;
         }
-        positionDivergence = K.gateway->decimal.amount.round(positionDivergence);
+        positionDivergence = K.gateway->decimal.funds.round(positionDivergence);
       };
       void report() const {
         Print::log("PG", "TBP: "
-          + to_string((int)(targetBasePosition / baseValue * 1e+2)) + "% = " + K.gateway->decimal.amount.str(targetBasePosition)
+          + to_string((int)(targetBasePosition / baseValue * 1e+2)) + "% = " + K.gateway->decimal.funds.str(targetBasePosition)
           + " " + K.gateway->base + ", pDiv: "
-          + to_string((int)(positionDivergence / baseValue * 1e+2)) + "% = " + K.gateway->decimal.amount.str(positionDivergence)
+          + to_string((int)(positionDivergence / baseValue * 1e+2)) + "% = " + K.gateway->decimal.funds.str(positionDivergence)
           + " " + K.gateway->base);
       };
-      const string explain() const override {
+      string explain() const override {
         return to_string(targetBasePosition);
       };
       string explainOK() const override {
@@ -1794,13 +1833,13 @@ namespace ₿ {
       mWalletPosition(const KryptoNinja &bot, const mQuotingParams &q, const mOrders &o, const mButtons &b, const mMarketLevels &l)
         : Broadcast(bot)
         , target(bot, q, l.stats.ewma.targetPositionAutoPercentage, base.value)
-        , safety(bot, q, b, l.fairValue, base.value, base.total, target.targetBasePosition)
+        , safety(bot, q, base, b, l.fairValue, target.targetBasePosition, target.positionDivergence)
         , profits(bot, q)
         , K(bot)
         , orders(o)
         , fairValue(l.fairValue)
       {};
-      const bool ready() const {
+      bool ready() const {
         return !safety.empty();
       };
       void read_from_gw(const mWallets &raw) {
@@ -1816,23 +1855,25 @@ namespace ₿ {
       };
       void calcFundsAfterOrder(const mLastOrder &order, bool *const askForFees) {
         if (!order.price) return;
-        calcHeldAmount(order.side);
-        calcFundsSilently();
+        if (!K.gateway->margin) {
+          calcHeldAmount(order.side);
+          calcFundsSilently();
+        }
         if (order.tradeQuantity) {
           safety.insertTrade(order);
-          *askForFees = true;
+          *askForFees = !K.gateway->margin;
         }
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::Position;
       };
-      const bool realtime() const override {
+      bool realtime() const override {
         return false;
       };
-      const bool read_asap() const override {
+      bool read_asap() const override {
         return false;
       };
-      const bool read_same_blob() const override {
+      bool read_same_blob() const override {
         return false;
       };
     private:
@@ -1882,7 +1923,7 @@ namespace ₿ {
     mQuote(const Side &s)
       : side(s)
     {};
-    const bool empty() const {
+    bool empty() const {
       return !size or !price;
     };
     void skip() {
@@ -1892,8 +1933,8 @@ namespace ₿ {
       price = size = 0;
       state = reason;
     };
-    virtual const bool deprecates(const Price&) const = 0;
-    const bool checkCrossed(const mQuote &opposite) {
+    virtual bool deprecates(const Price&) const = 0;
+    bool checkCrossed(const mQuote &opposite) {
       if (empty()) return false;
       if (opposite.empty() or deprecates(opposite.price)) {
         state = mQuoteState::Live;
@@ -1907,7 +1948,7 @@ namespace ₿ {
     mQuoteBid()
       : mQuote(Side::Bid)
     {};
-    const bool deprecates(const Price &higher) const override {
+    bool deprecates(const Price &higher) const override {
       return price < higher;
     };
   };
@@ -1915,7 +1956,7 @@ namespace ₿ {
     mQuoteAsk()
       : mQuote(Side::Ask)
     {};
-    const bool deprecates(const Price &lower) const override {
+    bool deprecates(const Price &lower) const override {
       return price > lower;
     };
   };
@@ -2023,7 +2064,7 @@ namespace ₿ {
       };
       static void calcMidOfMarket(
         const mMarketLevels &levels,
-        const Price         &tickPrice,
+        const Price         &,
         const Price         &widthPing,
         const Amount        &bidSize,
         const Amount        &askSize,
@@ -2095,7 +2136,7 @@ namespace ₿ {
       static void calcColossusOfMarket(
         const mMarketLevels &levels,
         const Price         &tickPrice,
-        const Price         &widthPing,
+        const Price         &,
         const Amount        &bidSize,
         const Amount        &askSize,
               mQuotes       &quotes
@@ -2120,7 +2161,7 @@ namespace ₿ {
       };
       static void calcDepthOfMarket(
         const mMarketLevels &levels,
-        const Price         &tickPrice,
+        const Price         &,
         const Price         &depth,
         const Amount        &bidSize,
         const Amount        &askSize,
@@ -2189,7 +2230,7 @@ namespace ₿ {
         dummyMM.calcRawQuotes();
         applyQuotingParameters();
       };
-      const bool abandon(const mOrder &order, mQuote &quote, unsigned int &bullets) {
+      bool abandon(const mOrder &order, mQuote &quote, unsigned int &bullets) {
         if (stillAlive(order)) {
           if (abs(order.price - quote.price) < K.gateway->tickPrice)
             quote.skip();
@@ -2208,13 +2249,13 @@ namespace ₿ {
         }
         return false;
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::QuoteStatus;
       };
-      const bool realtime() const override {
+      bool realtime() const override {
         return false;
       };
-      const bool read_same_blob() const override {
+      bool read_same_blob() const override {
         return false;
       };
     private:
@@ -2222,7 +2263,7 @@ namespace ₿ {
         quotes.bid.state =
         quotes.ask.state = state;
       };
-      const bool stillAlive(const mOrder &order) {
+      bool stillAlive(const mOrder &order) {
         if (order.status == Status::WaitingToWork
             or order.status == Status::WaitingToTerminate) {
           if (Tstamp - 10e+3 > order.time) {
@@ -2257,12 +2298,14 @@ namespace ₿ {
         if (!qp.buySizeMax and !quotes.bid.empty())
           quotes.bid.size = fmin(
             qp.sopSizeMultiplier * quotes.bid.size,
-            (wallet.quote.amount / quotes.bid.price) / 2
+              K.gateway->margin
+                ? (wallet.base.amount * quotes.bid.price) / 2
+                : (wallet.quote.amount / quotes.bid.price) / 2
           );
         if (!qp.sellSizeMax and !quotes.ask.empty())
           quotes.ask.size = fmin(
             qp.sopSizeMultiplier * quotes.ask.size,
-            wallet.base.amount / 2
+            (wallet.base.amount / 2) * (K.gateway->margin ? quotes.ask.price : 1)
           );
       };
       void applyEwmaProtection() {
@@ -2280,7 +2323,7 @@ namespace ₿ {
             if (!qp.buySizeMax)
               quotes.bid.size = fmin(
                 qp.aprMultiplier * quotes.bid.size,
-                wallet.target.targetBasePosition - wallet.base.total
+                (wallet.target.targetBasePosition - wallet.base.total) * (K.gateway->margin ? quotes.bid.price : 1)
               );
           }
         }
@@ -2291,7 +2334,7 @@ namespace ₿ {
             if (!qp.sellSizeMax)
               quotes.ask.size = fmin(
                 qp.aprMultiplier * quotes.ask.size,
-                wallet.base.total - wallet.target.targetBasePosition
+                (wallet.base.total - wallet.target.targetBasePosition) * (K.gateway->margin ? quotes.ask.price : 1)
               );
           }
         }
@@ -2356,7 +2399,7 @@ namespace ₿ {
                 or qp.pongAt == mPongAt::AveragePingAggressive
                 or qp.pongAt == mPongAt::LongPingAggressive
             )
-          ) quotes.ask.price = max(levels.bids.at(0).price + K.gateway->tickPrice, sellPong);
+          ) quotes.ask.price = fmax(levels.bids.at(0).price + K.gateway->tickPrice, sellPong);
           quotes.ask.isPong = quotes.ask.price >= sellPong;
         }
         if (!quotes.bid.empty() and wallet.safety.sellPing) {
@@ -2368,7 +2411,7 @@ namespace ₿ {
                 or qp.pongAt == mPongAt::AveragePingAggressive
                 or qp.pongAt == mPongAt::LongPingAggressive
             )
-          ) quotes.bid.price = min(levels.asks.at(0).price - K.gateway->tickPrice, buyPong);
+          ) quotes.bid.price = fmin(levels.asks.at(0).price - K.gateway->tickPrice, buyPong);
           quotes.bid.isPong = quotes.bid.price <= buyPong;
         }
       };
@@ -2437,7 +2480,9 @@ namespace ₿ {
             fmax(K.gateway->minSize, fmin(
               quotes.bid.size,
               K.gateway->decimal.amount.floor(
-                wallet.quote.total / (quotes.bid.price * (1.0 + K.gateway->makeFee))
+                K.gateway->margin
+                  ? wallet.base.total * quotes.bid.price
+                  : wallet.quote.total / (quotes.bid.price * (1.0 + K.gateway->makeFee))
               )
             ))
           );
@@ -2446,17 +2491,20 @@ namespace ₿ {
             fmax(K.gateway->minSize, fmin(
               quotes.ask.size,
               K.gateway->decimal.amount.floor(
-                wallet.base.total
+                wallet.base.total * (K.gateway->margin ? quotes.ask.price : 1)
               )
             ))
           );
       };
       void applyDepleted() {
         if (!quotes.bid.empty()
-          and wallet.quote.total / quotes.bid.price < K.gateway->minSize * (1.0 + K.gateway->makeFee)
+          and (K.gateway->margin
+            ? wallet.base.total * quotes.bid.price
+            : wallet.quote.total / quotes.bid.price
+          ) < K.gateway->minSize * (1.0 + K.gateway->makeFee)
         ) quotes.bid.clear(mQuoteState::DepletedFunds);
         if (!quotes.ask.empty()
-          and wallet.base.total < K.gateway->minSize * (1.0 + K.gateway->makeFee)
+          and (wallet.base.total * (K.gateway->margin ? quotes.ask.price : 1)) < K.gateway->minSize * (1.0 + K.gateway->makeFee)
         ) quotes.ask.clear(mQuoteState::DepletedFunds);
       };
       void applyWaitingPing() {
@@ -2519,10 +2567,10 @@ namespace ₿ {
           and j.at("agree").get<Connectivity>() != adminAgreement
         ) toggle();
       };
-      const bool paused() const {
+      bool paused() const {
         return !(bool)greenButton;
       };
-      const bool offline() const {
+      bool offline() const {
         return !(bool)greenGateway;
       };
       void agree(const bool &agreement) {
@@ -2534,7 +2582,7 @@ namespace ₿ {
           switchFlag();
         }
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::Connectivity;
       };
     private:
@@ -2581,14 +2629,14 @@ namespace ₿ {
         , qp(q)
         , orders(o)
       {};
-      const bool ready() {
+      bool ready() {
         if (semaphore.offline()) {
           calculon.offline();
           return false;
         }
         return true;
       };
-      const bool calcQuotes() {
+      bool calcQuotes() {
         if (semaphore.paused()) {
           calculon.paused();
           return false;
@@ -2596,7 +2644,7 @@ namespace ₿ {
         calculon.calcQuotes();
         return true;
       };
-      const vector<mOrder*> abandon(mQuote &quote) {
+      vector<mOrder*> abandon(mQuote &quote) {
         vector<mOrder*> abandoned;
         unsigned int bullets = qp.bullets;
         const bool all = quote.state != mQuoteState::Live;
@@ -2634,20 +2682,26 @@ namespace ₿ {
         : Broadcast(bot)
         , K(bot)
       {};
-      const json to_json() const {
+      json to_json() const {
         return {
-          {   "exchange", K.gateway->exchange        },
-          {       "base", K.gateway->base            },
-          {      "quote", K.gateway->quote           },
-          {  "tickPrice", K.gateway->tickPrice       },
-          {   "tickSize", K.gateway->tickSize        },
-          {    "minSize", K.gateway->minSize         },
-          {       "inet", K.arg<string>("interface") },
-          {"environment", K.arg<string>("title")     },
-          { "matryoshka", K.arg<string>("matryoshka")}
+          {   "exchange", K.gateway->exchange                         },
+          {       "base", K.gateway->base                             },
+          {      "quote", K.gateway->quote                            },
+          {     "margin", K.gateway->margin                           },
+          {  "webMarket", K.gateway->webMarket                        },
+          {  "webOrders", K.gateway->webOrders                        },
+          {  "tickFunds", K.gateway->decimal.funds.stream.precision() },
+          {  "tickPrice", K.gateway->decimal.price.stream.precision() },
+          {   "tickSize", K.gateway->decimal.amount.stream.precision()},
+          {  "stepPrice", K.gateway->decimal.price.step               },
+          {   "stepSize", K.gateway->decimal.amount.step              },
+          {    "minSize", K.gateway->minSize                          },
+          {       "inet", K.arg<string>("interface")                  },
+          {"environment", K.arg<string>("title")                      },
+          { "matryoshka", K.arg<string>("matryoshka")                 }
         };
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::ProductAdvertisement;
       };
   };
@@ -2672,7 +2726,7 @@ namespace ₿ {
         broadcast();
         orders_60s = 0;
       };
-      const json to_json() const {
+      json to_json() const {
         return {
           {  "addr", K.gateway->unlock           },
           {  "freq", orders_60s                  },
@@ -2682,7 +2736,7 @@ namespace ₿ {
           {"dbsize", K.dbSize()                  }
         };
       };
-      const mMatter about() const override {
+      mMatter about() const override {
         return mMatter::ApplicationState;
       };
   };

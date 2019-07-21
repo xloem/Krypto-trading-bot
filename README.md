@@ -1,4 +1,4 @@
-<p align="center">when <a href="http://catalannews.com/catalan-trial/item/jailed-leaders-share-closing-remarks-on-final-day-of-catalan-trial">injustice</a> becomes law, resistance becomes duty.<br /><br />come and see for yourself at <a href="https://spanishpolice.github.io/">https://spanishpolice.github.io/</a><br /><br /><img src="https://user-images.githubusercontent.com/1634027/60388447-f7469e00-9ab1-11e9-933c-5e3ce6520328.jpg" /><br />We will do it <b>again!</b><br /><br />(if this makes you sad, you can <a href="https://www.youtube.com/watch?v=0E1bNmyPWww">follow the sun</a>;<br>non-violence allows for tomorrow to be a new day for <b>everyone</b>)</p><br /><br /><br /><br /><br /><br /><br />
+<p align="center">when <a href="http://catalannews.com/catalan-trial/item/jailed-leaders-share-closing-remarks-on-final-day-of-catalan-trial">injustice</a> becomes law, <a href="https://www.youtube.com/watch?v=CJV6EqZBlsc">resistance</a> becomes duty.<br /><br />come and see for yourself at <a href="https://spanishpolice.github.io/">https://spanishpolice.github.io/</a><br /><br /><img src="https://user-images.githubusercontent.com/1634027/60388447-f7469e00-9ab1-11e9-933c-5e3ce6520328.jpg" /><br />We will do it <b>again!</b><br /><br />(if this makes you sad, you can <a href="https://www.youtube.com/watch?v=0E1bNmyPWww">follow the sun</a>;<br>non-violence allows for tomorrow to be a new day for <b>everyone</b>)</p><br /><br /><br /><br /><br /><br /><br />
 
 <img align="left" src="https://user-images.githubusercontent.com/1634027/36237231-e611590e-11fa-11e8-8486-6675078501dc.jpg" /><p align="right">self reminder:<br><b>patience is the mother of science</b></p><br><a href="http://ciutatrefugi.barcelona/en/welcome-barcelona">\*\*\* REFUGEES WELCOME! \*\*\*</a><br/>&thinsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="http://missingmigrants.iom.int/">\*\*\* FATAL ROUTES? \*\*\*</a>
 <br clear="left">
@@ -32,7 +32,7 @@ The web UI is compatible with most web browsers/devices/resolutions, but Firefox
 
 ||with Post-Only Orders support|without Post-Only|
 |---|---|---|
-|**without Maker fees**|*none*|*none*|
+|**without Maker fees**|[BitMEX](https://www.bitmex.com/) <sub>([fees](https://www.bitmex.com/app/fees))</sub><br> &#10239; _REST + WebSocket_|*none*|
 |**with Maker and Taker fees**|[Coinbase](https://pro.coinbase.com/) <sub>([fees](https://pro.coinbase.com/orders/fees))</sub><br> &#10239; _REST + WebSocket + FIX_<br><br>[HitBTC](https://hitbtc.com/) <sub>([fees](https://hitbtc.com/fee-tier))</sub><br>[Bequant](https://bequant.io/) <sub>([fees](https://bequant.io/fees-and-limits))</sub><br> &#10239; _REST + WebSocket_<br><br>[Bitfinex](https://www.bitfinex.com/) <sub>([fees](https://www.bitfinex.com/fees))</sub><br>[Ethfinex](https://www.ethfinex.com/) <sub>([fees](https://www.ethfinex.com/fees))</sub><br> &#10239; _REST + WebSocket_<br><br>[Kraken](https://www.kraken.com/) <sub>([fees](https://www.kraken.com/features/fee-schedule))</sub><br> &#10239; _REST_<br><br>[Poloniex](https://www.poloniex.com/) <sub>([fees](https://poloniex.com/fees/))</sub><br> &#10239; _REST_|[FCoin](https://fcoin.com/) <sub>([fees](https://support.fcoin.com/hc/en-us/articles/360003715514))</sub><br> &#10239; _REST + WebSocket_|
 
 All currency pairs are supported.
@@ -61,7 +61,6 @@ All currency pairs are supported.
   - [Changelogs](#unreleased-changelog)
 - Humans and Milk Mammals
   - [Unlock](#unlock)
-  - [Trading for Fun](#trading-for-fun)
   - [Donations](#donations)
   - [Very Special Thanks](#very-special-thanks-to)
   - [General Discussion](#general-discussion)
@@ -348,17 +347,11 @@ see the upstream project [michaelgrosner/tribeca](https://github.com/michaelgros
 
 The bot is unlocked for collaborators and contributors (feel free to make acceptable Pull Requests for already opened issues or for anything you consider useful, and let me know the BTC Payment Address for the bot that you wish to unlock in the description of the PR, and I will credit it for you).
 
-While locked, you are limited to using the first 3 market levels; once unlocked the bot reads the full list (up to thousands) of market levels from the exchange.
+While locked, the orderbook will be not in realtime, instead market price levels will be updated only once every 7 seconds.
 
-Anonymous users can also unlock any API Key by paying 0.01210000 BTC to the address displayed in the UI of the bot. Once unlocked you may use different currency pairs or reinstall on a different machine with the same unlocked API Key. However, if you want to use more than one exchange, you will need to pay again to unlock the API Key for each exchange.
+Anonymous users can also unlock any API Key by paying 0.01210000 BTC to the address displayed. Once unlocked you may use different currency pairs or reinstall on a different machine with the same unlocked API Key. However, if you want to use more than one exchange, you will need to pay again to unlock the API Key for each exchange.
 
 Otherwise if you choose to not support further development by ctubio, just keep running some old commit and do not upgrade (any commit prior to v0.3.0 was completely unlocked).
-
-### Trading for Fun
-
-Use `--free-version` argument to anonymously unlock any API Key and avoid the payment.
-
-All market levels will be visible and usable but not in realtime, instead will be slowdown around 7 seconds doing nothing.
 
 Please don't open issues asking how much % less the bot generates with `--free-version`; it is relative to your trading strategy, the market conditions, and the bot's performance.
 
@@ -429,7 +422,7 @@ Consequently, Pull Requests are welcome, but adhere to the Contributor License A
  - https://www.youtube.com/watch?v=_wGDcWD1E1A
  - https://www.youtube.com/watch?v=DVg2EJvvlF8
  - https://www.youtube.com/watch?v=1iZdJNH3Z1o
- - https://www.youtube.com/watch?v=hS78vyLezkc
+ - https://www.youtube.com/watch?v=Zi2MmIGZooQ
  - add your song here (please open a [new issue](https://github.com/ctubio/Krypto-trading-bot/issues/new?title=Today,%20I%20sing) to share your link)
 <p align="center"><img src="https://user-images.githubusercontent.com/1634027/32134633-642bb47a-bbf1-11e7-809c-f2d4d57678e0.jpg" />
 <br /><br />

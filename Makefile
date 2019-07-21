@@ -2,7 +2,7 @@ K       ?= K.sh
 MAJOR    = 0
 MINOR    = 5
 PATCH    = 3
-BUILD    = 28
+BUILD    = 45
 SOURCE  := $(notdir $(wildcard src/bin/*))
 CARCH    = x86_64-linux-gnu      \
            arm-linux-gnueabihf   \
@@ -141,7 +141,7 @@ else ifndef KTEST
 else
 	$(CHOST)-g++ $(KTEST) -o $(KLOCAL)/bin/K-$(KSRC) \
 	  -static-libstdc++ -static-libgcc -rdynamic     \
-	  $^ $(KARGS) -ldl
+	  $^ $(KARGS) -ldl -Wall -Wextra
 endif
 
 Darwin: src/bin/$(KSRC)/$(KSRC).cxx

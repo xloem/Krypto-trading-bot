@@ -20,23 +20,6 @@ From our fair value, we then need to make a market around that price. Back to ou
 
 When **Krypto-trading-bot** figures out a suitable market, **Krypto-trading-bot** will then send in the buy and sell orders. Hopefully it's able to buy for less then sell for more, and repeat many times per day. Sometimes that's not always the case - sometimes there are genuinely more buyers than sellers for the prices you are setting. Often this comes when the market is moving very fast in one direction. Luckily, **Krypto-trading-bot** will prevent you from selling too fast without finding corresponding buyers and will stop sending orders in the imbalanced side.
 
-## Where does all this happen in the code?
-
-The code is organized into 3 layers.
-
-1) Engine layer - The brains of the application. Portion of the code responsible for synthesizing market data, open order status, position, fees, trades, safety information and converting that into a quote to send to the exchange. This is the portion of the code which calculates a fair value (`FairValueEngine`) and generates quotes (`QuotingEngine`)
-
-2) Adapter layer - The engine layer should have no idea about the individual quirks of the exchanges. The engine layer uses the adapter layer to carry out its bidding. The adapter layer also has no idea that it is being used in a manner to make markets. In theory, the adapter layer code and the gateway layer code could be divorced from the Engine layer and we could build a technical analysis or latency arbitrage bot, instead. The adapter layer also contains all the state reported by the gateways.
-
-3) Gateway layer - Each exchange has their own API for interacting with the exchange. All of that business is hidden behind 4 different interfaces:
-
-  * `IMarketDataGateway`: Handles order book updates and market trade updates.
-  * `IOrderEntryGateway`: Send and cancel orders and handle updates to the orders.
-  * `IPositionGateway`: Pulls in the latest position (how much BTC and USD do I have?) information
-  * `IExchangeDetailsGateway`: Read-only information describing naming and exchange fee structure.
-
-Gateways are ideally stateless (some state may be needed in order to perform exchange-specific functionality) and are mostly translation layers between exchange APIs and the **Krypto-trading-bot** API.
-
 # How do I see what's going on?
 
 Navigate to the Web UI as described in the install process. You should see a screen like:
@@ -135,9 +118,21 @@ In the web UI, there are three rows of panels with cryptic looking names and edi
 
 * `widthPong` - Minimum width (spread) of our quote in USD (ex. a value of .3 is 30 cents). Used only if previous Pings exists in the opposite side.
 
-* `bidSize` - Maximum bid size of our quote in BTC (ex. a value of 1.5 is 1.5 bitcoins). If `%` is enabled, then this is the maximum bid size as a % of the total funds (available funds + held in both sides). For example, if 20% is set, and the total funds is $100, then the maximum bid size is $20. With the exception for when `apr` is checked and the system is aggressively rebalancing positions after they get out of whack.
+* `orderPctTot` - If `%` is enabled, specify the method for calculation of `bidSize` and `askSize` as percentages.
 
-* `askSize` - Maximum ask size of our quote in BTC (ex. a value of 1.5 is 1.5 bitcoins). If `%` is enabled, then this is the maximum ask size as a % of the total funds (available funds + held in both sides). For example, if 20% is set, and the total funds is $100, then the maximum bid size is $20. With the exception for when `apr` is checked and the system is aggressively rebalancing positions after they get out of whack.
+  * `Value` - Percentage is taken of the total funds (available funds + held in both sides). For example, if 20% is set, and the total funds is $100, then the maximum bid size is $20.  This has a similar effect as to non-percentage-based sizes, but allows for bid sizes to adjust to funds quantity.
+
+  * `Side` - Percentage is taken of funds only on one side.  For example, if 20% is set, and quote funds are worth 20$, and base funds are worth $80, then buys will placed for 4$ and sells will placed for $16.  This allows trading to continue even when funds on one side are heavily depleted, but results in held balances trending towards being evenly distributed.
+
+  * `TBPValue` - Percentage is taken of the total funds as in `Value`, but either the sell size or buy size is shrunk proportional to the value of the TBP, such that the balances will move towards being bought or sold depending on which side the TBP is.
+
+  * `TBPSide` - Percentage is taken of funds only on one side as in `Side`, but balance is taken relative to the `pDiv` extents such that they are not crossed, and either the sell size or buy size is shrunk proportional to the distance from the TBP, such that balances will tend to migrate towards the TBP.
+
+    * `exp` - If `TBPSide` is used for `orderPctTot`, this specifies the exponent to raise the size multipliers by.  The higher the number, the more the sizes will shrink as balance passes the TBP.
+
+* `bidSize` - Maximum bid size of our quote in BTC (ex. a value of 1.5 is 1.5 bitcoins). If `%` is enabled, then this is the maximum bid size as a % as specified in `orderPctTot`. With the exception for when `apr` is checked and the system is aggressively rebalancing positions after they get out of whack.
+
+* `askSize` - Maximum ask size of our quote in BTC (ex. a value of 1.5 is 1.5 bitcoins). If `%` is enabled, then this is the maximum ask size as a % as specified by `orderPctTot`. With the exception for when `apr` is checked and the system is aggressively rebalancing positions after they get out of whack.
 
 * `maxBidSize?` and `maxAskSize?` - Use `bidSize` and `askSize` as minimums and automatically find the maximum possible `size` based on the current "Target Base Position" (just as having enabled `apr` on `Size` but even before your position diverges more than `pDiv`).
 
