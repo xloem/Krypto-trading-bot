@@ -36,9 +36,10 @@ namespace ₿ {
         const size_t max = data.length();
         if (max > 1) {
           const bool flat = (data[0] & 0x40) != 0x40,
+                     text = (data[0] & 0x80) == 0x80,
                      mask = (data[1] & 0x80) == 0x80;
           const size_t key = mask ? 4 : 0;
-          size_t                            len =    data[1] & 0x7F,          pos = key;
+          size_t                            len =    data[1] & 0x7F         , pos = key;
           if      (            len <= 0x7D)                                   pos += 2;
           else if (max > 2 and len == 0x7E) len = (((data[2] & 0xFF) <<  8)
                                                 |   (data[3] & 0xFF)       ), pos += 4;
@@ -46,25 +47,21 @@ namespace ₿ {
                                                 |  ((data[7] & 0xFF) << 16)
                                                 |  ((data[8] & 0xFF) <<  8)
                                                 |   (data[9] & 0xFF)       ), pos += 10;
-          if (!flat or pos == key)
-            drop = true;
-          else if (max >= pos + len) {
-            if (mask)
-              for (size_t i = 0; i < len; i++)
-                data.at(pos + i) ^= data.at(pos - key + (i % key));
-            const unsigned char opcode = data[0] & 0x0F;
-            if (opcode == 0x09)
-              pong += frame(data.substr(pos, len), 0x0A, !mask);
-            else if (opcode == 0x02
-                  or opcode == 0x08
-                  or opcode == 0x0A
-                  or ((data[0] & 0x80) != 0x80 and (opcode == 0x00
-                                                 or opcode == 0x01))
-            ) drop = opcode == 0x08;
-            else
-              msg = data.substr(pos, len);
-            data = data.substr(pos + len);
-          }
+          if (flat and text and pos > key) {
+            if (max >= pos + len) {
+              if (mask)
+                for (size_t i = 0; i < len; i++)
+                  data.at(pos + i) ^= data.at(pos - key + (i % key));
+              const unsigned char opcode = data[0] & 0x0F;
+              if      (opcode == 0x01)
+                msg = data.substr(pos, len);
+              else if (opcode == 0x09)
+                pong += frame(data.substr(pos, len), 0x0A, !mask);
+              else if (opcode != 0x0A)
+                drop = true;
+              data = data.substr(pos + len);
+            }
+          } else drop = true;
         }
         return msg;
       };
@@ -92,22 +89,20 @@ namespace ₿ {
       };
       string unframe(string &data, string &pong, bool &drop) const {
         string msg;
-        const size_t end = data.find("\u0001" "10=");
+        size_t end = data.find("\u0001" "10=");
         if (end != string::npos and data.length() > end + 7) {
           string raw = data.substr(0, end + 8);
           data = data.substr(raw.length());
-          if (raw.find("\u0001" "35=0" "\u0001") != string::npos
-            or raw.find("\u0001" "35=1" "\u0001") != string::npos
+          if      (raw.find("\u0001" "35=0" "\u0001") != string::npos
+            or     raw.find("\u0001" "35=1" "\u0001") != string::npos
           ) pong = "0";
-          else if (raw.find("\u0001" "35=5" "\u0001") != string::npos) {
-            pong = "5";
-            drop = true;
-          } else {
-            size_t tok;
-            while ((tok = raw.find("\u0001")) != string::npos) {
+          else if (raw.find("\u0001" "35=5" "\u0001") != string::npos)
+            pong = "5", drop = true;
+          else {
+            while ((end = raw.find("\u0001")) != string::npos) {
               raw.replace(raw.find("="), 1, "\":\"");
-              msg += "\"" + raw.substr(0, tok + 2) + "\",";
-              raw = raw.substr(tok + 3);
+              msg += "\"" + raw.substr(0, end + 2) + "\",";
+              raw = raw.substr(end + 3);
             }
             msg.pop_back();
             msg = "{" + msg + "}";
@@ -119,36 +114,77 @@ namespace ₿ {
 
   class Loop {
     public_friend:
+      using TimeEvent = function<void(const unsigned int&)>;
       class Timer {
         private:
                   unsigned int tick  = 0;
           mutable unsigned int ticks = 300;
-          vector<function<void(const unsigned int&)>> callbacks;
+             vector<TimeEvent> jobs;
         public:
           void ticks_factor(const unsigned int &factor) const {
             ticks = 300 * (factor ?: 1);
           };
           void timer_1s() {
-            for (const auto &it : callbacks) it(tick);
+            for (const auto &it : jobs) it(tick);
             tick = (tick + 1) % ticks;
           };
-          void push_back(const function<void(const unsigned int&)> &data) {
-            callbacks.push_back(data);
+          void push_back(const TimeEvent &data) {
+            jobs.push_back(data);
           };
       };
       class Async {
+        public_friend:
+          template<typename T> class Event {
+            private_friend:
+              class Wakeup {
+                private:
+                  Async *const event = nullptr;
+                public:
+                  Wakeup(Async *const e)
+                    : event(e)
+                  {};
+                  ~Wakeup()
+                  {
+                    event->wakeup();
+                  };
+              };
+            public:
+              function<void(const T&)> write = nullptr;
+            private:
+                              Async *event = nullptr;
+              function<vector<T>()>  job   = nullptr;
+                  future<vector<T>>  data;
+            public:
+              void try_write(const T &rawdata) const {
+                if (write) write(rawdata);
+              };
+              void wait_for(Loop *const loop, const function<vector<T>()> j) {
+                job = j;
+                event = loop->async([&]() {
+                  if (data.valid())
+                    for (const T &it : data.get()) try_write(it);
+                });
+              };
+              void ask_for() {
+                if (!data.valid())
+                  data = ::async(launch::async, [&]() {
+                    Wakeup again(event);
+                    return job();
+                  });
+              };
+          };
         private:
-          function<void()> callback = nullptr;
+          function<void()> job = nullptr;
         public:
           Async(const function<void()> data)
-            : callback(data)
+            : job(data)
           {};
           virtual void wakeup() {};
           void ready() {
-            callback();
+            job();
           };
           void link(const function<void()> &data) {
-            callback = data;
+            job = data;
           };
       };
       class Poll: public Async {
@@ -166,14 +202,14 @@ namespace ₿ {
       };
     public:
       virtual          void  timer_ticks_factor(const unsigned int&) const        = 0;
-      virtual          void  timer_1s(const function<void(const unsigned int&)>&) = 0;
+      virtual          void  timer_1s(const TimeEvent&)                           = 0;
       virtual         Async *async(const function<void()>&)                       = 0;
       virtual curl_socket_t  poll()                                               = 0;
       virtual          void  walk()                                               = 0;
       virtual          void  end()                                                = 0;
   };
 #if defined _WIN32 or defined __APPLE__
-  class Libuv: public Loop {
+  class Events: public Loop {
     public_friend:
       class Timer: public Loop::Timer {
         public:
@@ -207,7 +243,11 @@ namespace ₿ {
           };
       };
       class Poll: public Loop::Poll {
-        public:
+        protected:
+          using SOCK_OPTVAL  = char;
+          const int EPOLLIN  = UV_READABLE;
+          const int EPOLLOUT = UV_WRITABLE;
+        private:
           uv_poll_t event;
         public:
           Poll(const curl_socket_t &s = 0)
@@ -245,7 +285,7 @@ namespace ₿ {
       void timer_ticks_factor(const unsigned int &factor) const override {
         timer.ticks_factor(factor);
       };
-      void timer_1s(const function<void(const unsigned int&)> &data) override {
+      void timer_1s(const TimeEvent &data) override {
         timer.push_back(data);
       };
       Loop::Async *async(const function<void()> &data) override {
@@ -266,9 +306,11 @@ namespace ₿ {
       };
   };
 #else
-  class Epoll: public Loop {
+  class Events: public Loop {
     public_friend:
       class Poll: public Loop::Poll {
+        protected:
+          using SOCK_OPTVAL = int;
         private:
           curl_socket_t loopfd = 0;
         public:
@@ -341,14 +383,14 @@ namespace ₿ {
          list<Async> events;
          epoll_event ready[32] = {};
     public:
-      Epoll()
+      Events()
         : sockfd(epoll_create1(EPOLL_CLOEXEC))
         , timer(sockfd)
       {};
       void timer_ticks_factor(const unsigned int &factor) const override {
         timer.ticks_factor(factor);
       };
-      void timer_1s(const function<void(const unsigned int&)> &data) override {
+      void timer_1s(const TimeEvent &data) override {
         timer.push_back(data);
       };
       Loop::Async *async(const function<void()> &data) override {
@@ -377,11 +419,14 @@ namespace ₿ {
   };
 #endif
 
+  static function<void(CURL*)> curl_global_setopt = [](CURL *curl) {
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "K");
+  };
+
   class Curl {
     public:
-      static function<void(CURL*)> global_setopt;
     private_friend:
-      class Easy: public Epoll::Poll {
+      class Easy: public Events::Poll {
         private:
           CURL *curl = nullptr;
           string out;
@@ -408,7 +453,7 @@ namespace ₿ {
             in.clear();
             CURLcode rc;
             if (CURLE_OK == (rc = init())) {
-              global_setopt(curl);
+              curl_global_setopt(curl);
               curl_easy_setopt(curl, CURLOPT_URL, url.data());
               curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
               curl_easy_setopt(curl, CURLOPT_CONNECT_ONLY, 1L);
@@ -526,7 +571,7 @@ namespace ₿ {
             CURL *curl = curl_easy_init();
             if (curl) {
               custom_setopt(curl);
-              global_setopt(curl);
+              curl_global_setopt(curl);
               curl_easy_setopt(curl, CURLOPT_URL, url.data());
               curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, &write);
               curl_easy_setopt(curl, CURLOPT_WRITEDATA, &reply);
@@ -585,14 +630,14 @@ namespace ₿ {
               }
             }
             curl_url_cleanup(url);
-            return rc != CURLE_OK
-                 ? rc
-                 : Easy::connect(
-                     "http" + uri.substr(2),
-                     header,
-                     "HTTP/1.1 101 Switching Protocols",
-                     "HSmrc0sMlYUkAGmm5OPpG2HaGWk="
-                   );
+            return rc == CURLE_OK
+              ? Easy::connect(
+                  "http" + uri.substr(2),
+                  header,
+                  "HTTP/1.1 101 Switching Protocols",
+                  "HSmrc0sMlYUkAGmm5OPpG2HaGWk="
+                )
+              : rc;
           };
           CURLcode emit(const string &data, const int &opcode) {
             return Easy::emit(frame(data, opcode, true));
@@ -760,7 +805,7 @@ namespace ₿ {
          Upgrade upgrade  = nullptr;
          Message message  = nullptr;
       };
-      class Socket: public Epoll::Poll {
+      class Socket: public Events::Poll {
         public:
           Socket(const curl_socket_t &s = 0)
             : Poll(s)
@@ -803,7 +848,7 @@ namespace ₿ {
             Socket::shutdown();
             if (!time) session->upgrade(-1, addr);
           };
-          Clock upgraded() const {
+          bool upgraded() const {
             return !time;
           };
           void send(const string &data) {
@@ -1124,35 +1169,31 @@ namespace ₿ {
                  + content;
           };
         private:
-          bool accept_request(const curl_socket_t &loopfd) {
+          void accept_request(const curl_socket_t &loopfd) {
             curl_socket_t clientfd = accept4(sockfd, nullptr, nullptr, SOCK_CLOEXEC | SOCK_NONBLOCK);
+            if (clientfd == -1) return;
 #ifdef __APPLE__
-            if (clientfd != -1) {
-              const int noSigpipe = 1;
-              setsockopt(clientfd, SOL_SOCKET, SO_NOSIGPIPE, &noSigpipe, sizeof(int));
-            }
+            const int noSigpipe = 1;
+            setsockopt(clientfd, SOL_SOCKET, SO_NOSIGPIPE, &noSigpipe, sizeof(int));
 #endif
-            if (clientfd != -1) {
-              SSL *ssl = nullptr;
-              if (ctx) {
-                ssl = SSL_new(ctx);
-                SSL_set_accept_state(ssl);
-                SSL_set_fd(ssl, clientfd);
-                SSL_set_mode(ssl, SSL_MODE_RELEASE_BUFFERS);
-              }
-              requests.emplace_back(clientfd, loopfd, ssl, &session);
+            SSL *ssl = nullptr;
+            if (ctx) {
+              ssl = SSL_new(ctx);
+              SSL_set_accept_state(ssl);
+              SSL_set_fd(ssl, clientfd);
+              SSL_set_mode(ssl, SSL_MODE_RELEASE_BUFFERS);
             }
-            return clientfd > 0;
+            requests.emplace_back(clientfd, loopfd, ssl, &session);
           };
           void socket(const int &domain, const int &type, const int &protocol) {
             sockfd = ::socket(domain, type | SOCK_CLOEXEC | SOCK_NONBLOCK, protocol);
+            if (sockfd == -1) sockfd = 0;
 #ifdef __APPLE__
-            if (sockfd != -1) {
+            else {
               const int noSigpipe = 1;
               setsockopt(sockfd, SOL_SOCKET, SO_NOSIGPIPE, &noSigpipe, sizeof(int));
             }
 #endif
-            if (sockfd == -1) sockfd = 0;
           };
       };
   };
@@ -1205,6 +1246,38 @@ namespace ₿ {
         uuid.erase(remove(uuid.begin(), uuid.end(), '-'), uuid.end());
         return uuid;
       }
+  };
+
+  class Decimal {
+    public:
+      stringstream stream;
+      double step = 0;
+    private:
+      double tick = 0;
+    public:
+      Decimal()
+      {
+        stream << fixed;
+      };
+      void precision(const double &t) {
+        stream.precision(ceil(abs(log10(tick = t))));
+        step = pow(10, -1 * stream.precision());
+      };
+      double round(const double &input) const {
+        return ::round((::round(
+          input / step) * step)
+                / tick) * tick;
+      };
+      double floor(const double &input) const {
+        return ::floor((::floor(
+          input / step) * step)
+                / tick) * tick;
+      };
+      string str(const double &input) {
+        stream.str("");
+        stream << round(input);
+        return stream.str();
+      };
   };
 }
 

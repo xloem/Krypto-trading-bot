@@ -1,4 +1,3 @@
-#include "Krypto.ninja.h"
                                  /*                                 */ // youtu.be/dVlGmdl-g9Q
           ;;;;;;;;;;;;;;;;;;;;;;   /*         Wherever you go..     */
           ;;;;;    ;;;;    ;;;;;     /*       Whatever you do..     */ // youtu.be/DKSO5YlYbOg
@@ -14,9 +13,14 @@ using namespace    ₿;    ;;;;;;;/*(  <>  )`-. Or how my OS breaks,  */ // yout
 #include "trading-bot.h"                                               // youtu.be/dp5hsDgENLk
 
 int main(int argc, char** argv) {
-  K.main(argc, argv)->wait(&engine);
+  K.main(argc, argv)->wait();
   return EXIT_FAILURE;
 };
+
+#ifndef NDEBUG
+#include "trading-bot.test.h"
+#endif
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;                        /*K\*/                         ;
          /*    .        kKKKKK,       .         *

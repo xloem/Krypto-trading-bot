@@ -15,7 +15,7 @@ export class OrdersComponent implements OnInit {
 
   private fireCxl: Subscribe.IFire<any>;
 
-  @Input() product: Models.ProductState;
+  @Input() product: Models.ProductAdvertisement;
 
   @Input() set agree(agree: boolean) {
     if (agree) return;
@@ -68,7 +68,7 @@ export class OrdersComponent implements OnInit {
       }, cellRendererFramework: BaseCurrencyCellComponent},
       { width: 74, field: 'value', headerName: 'value', cellClass: (params) => {
         return (params.data.side === 'Ask') ? "sell" : "buy";
-      }, cellRendererFramework: QuoteCurrencyCellComponent},
+      }},
       { width: 45, suppressSizeToFit: true, field: 'type', headerName: 'type' },
       { width: 40, field: 'tif', headerName: 'tif' },
       { width: 45, field: 'lat', headerName: 'lat'},
@@ -88,7 +88,7 @@ export class OrdersComponent implements OnInit {
   }
 
   private addRowData = (o) => {
-    if (!this.gridOptions.api || this.product.advert.base == null) return;
+    if (!this.gridOptions.api || this.product.base == null) return;
     if (!o || (typeof o.length == 'number' && !o.length)) {
       this.gridOptions.api.setRowData([]);
       return;
@@ -107,7 +107,12 @@ export class OrdersComponent implements OnInit {
           node.setData(Object.assign(node.data, {
             time: o.time,
             price: o.price,
-            value: Math.round(o.price * o.quantity * 100) / 100,
+            value: this.product.margin == 0
+                     ? (Math.round(o.quantity * o.price * 100) / 100) + " " + this.product.quote
+                     : (this.product.margin == 1
+                         ? (Math.round((o.quantity / o.price) * 1e+8) / 1e+8) + " " + this.product.base
+                         : (Math.round((o.quantity * o.price) * 1e+8) / 1e+8) + " " + this.product.base
+                     ),
             tif: Models.TimeInForce[o.timeInForce],
             lat: o.latency+'ms',
             qty: o.quantity
@@ -122,7 +127,12 @@ export class OrdersComponent implements OnInit {
         exchangeId: o.exchangeId,
         side: Models.Side[o.side],
         price: o.price,
-        value: Math.round(o.price * o.quantity * 100) / 100,
+        value: this.product.margin == 0
+                 ? (Math.round(o.quantity * o.price * 100) / 100) + " " + this.product.quote
+                 : (this.product.margin == 1
+                     ? (Math.round((o.quantity / o.price) * 1e+8) / 1e+8) + " " + this.product.base
+                     : (Math.round((o.quantity * o.price) * 1e+8) / 1e+8) + " " + this.product.base
+                 ),
         exchange: o.exchange,
         type: Models.OrderType[o.type],
         tif: Models.TimeInForce[o.timeInForce],
@@ -130,9 +140,9 @@ export class OrdersComponent implements OnInit {
         qty: o.quantity,
         pong: o.isPong,
         time: o.time,
-        quoteSymbol: this.product.advert.quote,
-        productFixedPrice: this.product.fixedPrice,
-        productFixedSize: this.product.fixedSize
+        quoteSymbol: this.product.quote,
+        productFixedPrice: this.product.tickPrice,
+        productFixedSize: this.product.tickSize
       }]});
 
     this.gridOptions.api.sizeColumnsToFit();

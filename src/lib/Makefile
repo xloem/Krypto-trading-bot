@@ -5,17 +5,15 @@ $(if $(subst 0,,${MAKELEVEL}),,$(warning $(ERR));$(error $(HINT)))
 V_ZLIB  = 1.2.11
 V_SSL   = 1.1.1c
 V_ARES  = 1.15.0
-V_CURL  = 7.65.0
-V_SQL   = 3280000
+V_CURL  = 7.65.3
+V_SQL   = 3290000
 V_NCUR  = 6.1
-V_JSON  = 3.6.1
-V_CATCH = 2.8.0
-V_UWS   = 0.14.8
-V_QF    = 1.15.1
-V_UV    = 1.29.1
+V_JSON  = 3.7.0
+V_CATCH = 2.9.2
+V_UV    = 1.31.0
 V_B     = 1.69.0
 V_B_SHA = 8f32d4617390d1c2d16f26a27ab60d97807b35440d45891fa340fc2648b04406
-V_BS    = 3.0.1
+V_BS    = 3.2.1
 
 KBUILD := $(abspath ../../build-$(KHOST))
 
@@ -43,14 +41,11 @@ openssl:
 	curl -L https://www.openssl.org/source/openssl-$(V_SSL).tar.gz | tar xz -C $(KBUILD)      \
 	&& cd $(KBUILD)/openssl-$(V_SSL) && CC=gcc                                                \
 	./Configure $(shell test -n "`echo $(CHOST) | grep mingw32`" && echo mingw64 || echo gcc) \
+	threads -pthread -D_REENTRANT                                                             \
 	--cross-compile-prefix=$(CHOST)- --prefix=$(KBUILD)/local --openssldir=$(KBUILD)/local    \
-<<<<<<< HEAD
-	threads -pthread -D_REENTRANT && make all install_sw install_ssldirs                      )
-=======
 	&& sed -i "/extern int getentrop/,+4d" crypto/rand/rand_unix.c                            \
 	&& sed -i "s/^\(\#.*if\).*__ELF__.*$$/\1 1/" crypto/rand/rand_unix.c                      \
 	&& make all install_sw install_ssldirs                                                    )
->>>>>>> master
 
 ares:
 	test -d $(KBUILD)/c-ares-$(V_ARES) || (                                                  \
@@ -116,13 +111,11 @@ boost:
 	./bootstrap.sh --prefix=$(KBUILD)/local --with-toolset=gcc &&                                         \
 	sed -i "s/using gcc/using gcc : : $(CHOST)-g++/" project-config.jam && ./b2 install                   )
 
-# includes manual application of https://github.com/bitshares/bitshares-core/pull/1727/commits/583b2c549b80176a5eb6538ddbc2dbe52b1de583
 bitshares: boost openssl
 	test -d $(KBUILD)/bitshares-core-$(V_BS) || (                                                       \
 	cd $(KBUILD) && git clone --branch $(V_BS) https://github.com/bitshares/bitshares-core.git          \
 	--recursive bitshares-core-$(V_BS) && cd $(KBUILD)/bitshares-core-$(V_BS) &&                        \
-	echo 'INSTALL( FILES ${HEADERS} DESTINATION "include/graphene/debug_witness" )'                     \
-	>> libraries/plugins/debug_witness/CMakeLists.txt && mkdir build && cd build &&                     \
+	mkdir build && cd build &&                                                                          \
 	cmake .. -DCMAKE_INSTALL_PREFIX:PATH=$(KBUILD)/local -DOPENSSL_ROOT_DIR=$(KBUILD)/local             \
 	-DCMAKE_CXX_COMPILER=$(CHOST)-g++ -DCMAKE_SYSTEM_NAME="`echo $(CHOST) | sed 's/.*-linux-.*/Linux/p' \
 	| sed 's/.*-darwin-.*/Darwin/p' | sed '/.*-mingw32-.*/Windows/p;'`" -DBOOST_ROOT=$(KBUILD)/local && \
@@ -147,10 +140,6 @@ else
 	| tar xz -C $(KBUILD) && cd $(KBUILD)/lcov-$(V_LCOV) && sudo make install                             )
 endif
 
-<<<<<<< HEAD
 .PHONY: boost bitshares
 
-.PHONY: all dist clean zlib openssl curl sqlite ncurses json catch uws quickfix libuv lcov pvs
-=======
 .PHONY: all dist clean zlib openssl curl sqlite ncurses json catch libuv lcov pvs
->>>>>>> master

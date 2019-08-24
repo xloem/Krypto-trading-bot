@@ -4,23 +4,20 @@
 //! \brief Minimal user application framework.
 
 namespace ₿ {
-  string epilogue, epitaph;
+  static string epilogue, epitaph;
 
   //! \brief     Call all endingFn once and print a last log msg.
   //! \param[in] reason Allows any (colorful?) string.
   //! \param[in] reboot Allows a reboot only because https://tldp.org/LDP/Bash-Beginners-Guide/html/sect_09_03.html.
-  void exit(const string &reason = "", const bool &reboot = false) {
+  static void exit(const string &reason = "", const bool &reboot = false) {
     epilogue = reason + string((reason.empty() or reason.back() == '.') ? 0 : 1, '.');
     raise(reboot ? SIGTERM : SIGQUIT);
   };
 
-  function<void(CURL*)> Curl::global_setopt = [](CURL *curl) {
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "K");
-  };
+  static int colorful = 1;
 
   class Ansi {
     public:
-      static int colorful;
       static string reset() {
           return paint(0, -1);
       };
@@ -63,68 +60,177 @@ namespace ₿ {
       };
   };
 
-  int Ansi::colorful = 1;
-
   //! \brief     Call all endingFn once and print a last error log msg.
   //! \param[in] prefix Allows any string, if possible with a length of 2.
   //! \param[in] reason Allows any (colorful?) string.
   //! \param[in] reboot Allows a reboot only because https://tldp.org/LDP/Bash-Beginners-Guide/html/sect_09_03.html.
-  void error(const string &prefix, const string &reason, const bool &reboot = false) {
+  static void error(const string &prefix, const string &reason, const bool &reboot = false) {
     if (reboot) this_thread::sleep_for(chrono::seconds(3));
     exit(prefix + Ansi::r(COLOR_RED) + " Errrror: " + Ansi::b(COLOR_RED) + reason, reboot);
   };
 
-  struct Margin {
-    unsigned int top;
-    unsigned int right;
-    unsigned int bottom;
-    unsigned int left;
+  class Rollout {
+    public:
+      Rollout(/* KMxTWEpb9ig */) {
+        static once_flag rollout;
+        call_once(rollout, version);
+      };
+    protected:
+      static void version() {
+        curl_global_init(CURL_GLOBAL_ALL);
+        clog << Ansi::b(COLOR_GREEN) << K_SOURCE
+             << Ansi::r(COLOR_GREEN) << " " K_BUILD " " K_STAMP ".\n";
+        const string mods = changelog();
+        const int commits = count(mods.begin(), mods.end(), '\n');
+        clog << Ansi::b(COLOR_GREEN) << K_0_DAY << Ansi::r(COLOR_GREEN) << ' '
+             << (commits
+                 ? '-' + to_string(commits) + "commit"
+                   + string(commits == 1 ? 0 : 1, 's') + '.'
+                 : "(0day)"
+                )
+#ifndef NDEBUG
+            << " with DEBUG MODE enabled"
+#endif
+            << ".\n" << Ansi::r(COLOR_YELLOW) << mods << Ansi::reset();
+      };
+      static string changelog() {
+        string mods;
+#ifdef NDEBUG
+        const json diff = Curl::Web::xfer("https://api.github.com/repos/ctubio/"
+                            "Krypto-trading-bot/compare/" K_HEAD "...HEAD", 4L);
+        if (diff.value("ahead_by", 0)
+          and diff.find("commits") != diff.end()
+          and diff.at("commits").is_array()
+        ) for (const json &it : diff.at("commits"))
+          mods += it.value("/commit/author/date"_json_pointer, "").substr(0, 10) + " "
+                + it.value("/commit/author/date"_json_pointer, "").substr(11, 8)
+                + " (" + it.value("sha", "").substr(0, 7) + ") "
+                + it.value("/commit/message"_json_pointer, "").substr(0,
+                  it.value("/commit/message"_json_pointer, "").find("\n\n") + 1
+                );
+#endif
+        return mods;
+      };
   };
 
-  class Print {
+  static vector<function<void()>> endingFn;
+
+  class Ending: public Rollout {
     public:
-      static WINDOW *stdlog;
-      static Margin margin;
-      static void (*display)();
-      static bool windowed() {
-        if (!display) return false;
-        if (stdlog)
-          error("SH", "Unable to print another window");
-        if (!initscr())
-          error("SH",
-            "Unable to initialize ncurses, try to run in your terminal"
-              "\"export TERM=xterm\", or use --naked argument"
-          );
-        Ansi::default_colors();
-        if (margin.top != ANY_NUM) {
-          stdlog = subwin(
-            stdscr,
-            getmaxy(stdscr) - margin.bottom - margin.top,
-            getmaxx(stdscr) - margin.left - margin.right,
-            margin.top,
-            margin.left
-          );
-          scrollok(stdlog, true);
-          idlok(stdlog, true);
-        }
-        signal(SIGWINCH, [](const int) {
-          endwin();
-          refresh();
-          clear();
+      Ending() {
+        signal(SIGINT, [](const int) {
+          clog << '\n';
+          raise(SIGQUIT);
         });
-        repaint();
-        return true;
+        signal(SIGQUIT, die);
+        signal(SIGTERM, err);
+        signal(SIGABRT, wtf);
+        signal(SIGSEGV, wtf);
+        signal(SIGUSR1, wtf);
+        signal(SIGPIPE, SIG_IGN);
       };
-      static void repaint() {
-        if (!display) return;
-        display();
+      void ending(const function<void()> &fn) {
+        endingFn.push_back(fn);
+      };
+    private:
+      static void halt(const int code) {
+        vector<function<void()>> happyEndingFn;
+        endingFn.swap(happyEndingFn);
+        for (const auto &it : happyEndingFn) it();
+        colorful = 1;
+        clog << Ansi::b(COLOR_GREEN) << 'K'
+             << Ansi::r(COLOR_GREEN) << " exit code "
+             << Ansi::b(COLOR_GREEN) << code
+             << Ansi::r(COLOR_GREEN) << '.'
+             << Ansi::reset() << '\n';
+        EXIT(code);
+      };
+      static void die(const int) {
+        if (epilogue.empty())
+          epilogue = "Excellent decision! "
+                   + Curl::Web::xfer("https://api.icndb.com/jokes/random?escape=javascript&limitTo=[nerdy]", 4L)
+                       .value("/value/joke"_json_pointer, "let's plant a tree instead..");
+        halt(
+          epilogue.find("Errrror") == string::npos
+            ? EXIT_SUCCESS
+            : EXIT_FAILURE
+        );
+      };
+      static void err(const int) {
+        if (epilogue.empty()) epilogue = "Unknown error, no joke.";
+        halt(EXIT_FAILURE);
+      };
+      static void wtf(const int sig) {
+        epilogue = Ansi::r(COLOR_CYAN) + "Errrror: " + strsignal(sig) + ' ';
+        const string mods = changelog();
+        if (mods.empty()) {
+          epilogue += "(Three-Headed Monkey found):\n" + epitaph
+             + "- binbuild: " K_SOURCE " " K_BUILD "\n"
+               "- lastbeat: " + to_string((float)clock()/CLOCKS_PER_SEC) + '\n'
+#ifndef _WIN32
+            + "- tracelog: " + '\n';
+          void *k[69];
+          size_t jumps = backtrace(k, 69);
+          char **trace = backtrace_symbols(k, jumps);
+          for (;
+            jumps --> 0;
+            epilogue += "  " + to_string(jumps) + ": " + string(trace[jumps]) + '\n'
+          );
+          free(trace)
+#endif
+          ;
+          epilogue += '\n' + Ansi::b(COLOR_RED) + "Yikes!" + Ansi::r(COLOR_RED)
+            + '\n' + "please copy and paste the error above into a new github issue (noworry for duplicates)."
+            + '\n' + "If you agree, go to https://github.com/ctubio/Krypto-trading-bot/issues/new"
+            + '\n' + '\n';
+        } else
+          epilogue += string("(deprecated K version found).") + '\n'
+            + '\n' + Ansi::b(COLOR_YELLOW) + "Hint!" + Ansi::r(COLOR_YELLOW)
+            + '\n' + "please upgrade to the latest commit; the encountered error may be already fixed at:"
+            + '\n' + mods
+            + '\n' + "If you agree, consider to run \"make latest\" prior further executions."
+            + '\n' + '\n';
+        halt(EXIT_FAILURE);
+      };
+  };
+
+  class Terminal {
+    public:
+      struct {
+        void (*terminal)() = nullptr;
+        mutable struct {
+          unsigned int top;
+          unsigned int right;
+          unsigned int bottom;
+          unsigned int left;
+        } padding = {ANY_NUM, 0, 0, 0};
+      } display;
+      WINDOW *stdlog = nullptr;
+    public:
+      unsigned int padding_bottom(const unsigned int &bottom) const {
+        if (bottom != display.padding.bottom) {
+          const int diff = bottom - display.padding.bottom;
+          display.padding.bottom = bottom;
+          if (diff > 0) wscrl(stdlog, diff);
+          wresize(
+            stdlog,
+            getmaxy(stdscr) - display.padding.top - display.padding.bottom,
+            getmaxx(stdscr) - display.padding.left - display.padding.right
+          );
+          if (diff < 0) wscrl(stdlog, diff);
+        }
+        return display.padding.bottom;
+      };
+      void repaint() const {
+        if (!display.terminal) return;
+        display.terminal();
         wrefresh(stdscr);
         if (stdlog) {
           wmove(stdlog, getmaxy(stdlog) - 1, 0);
           wrefresh(stdlog);
         }
       };
-      static string stamp() {
+      string stamp() const {
         chrono::system_clock::time_point clock = chrono::system_clock::now();
         chrono::system_clock::duration t = clock.time_since_epoch();
         t -= chrono::duration_cast<chrono::seconds>(t);
@@ -138,9 +244,10 @@ namespace ₿ {
         time_t tt = chrono::system_clock::to_time_t(clock);
         char datetime[15];
         strftime(datetime, 15, "%m/%d %T", localtime(&tt));
-        if (!display) return Ansi::b(COLOR_GREEN) + datetime
-                           + Ansi::r(COLOR_GREEN) + microtime.str()
-                           + Ansi::b(COLOR_WHITE) + ' ';
+        if (!display.terminal)
+          return Ansi::b(COLOR_GREEN) + datetime
+               + Ansi::r(COLOR_GREEN) + microtime.str()
+               + Ansi::b(COLOR_WHITE) + ' ';
         if (stdlog) {
           wattron(stdlog, COLOR_PAIR(COLOR_GREEN));
           wattron(stdlog, A_BOLD);
@@ -152,13 +259,13 @@ namespace ₿ {
         }
         return "";
       };
-      static void log(const string &prefix, const string &reason, const string &highlight = "") {
+      void log(const string &prefix, const string &reason, const string &highlight = "") const {
         int color = 0;
         if (reason.find("NG TRADE") != string::npos) {
           if (reason.find("BUY") != string::npos)       color = 1;
           else if (reason.find("SELL") != string::npos) color = -1;
         }
-        if (!display) {
+        if (!display.terminal) {
           clog << stamp() << prefix;
           if (color == 1)       clog << Ansi::r(COLOR_CYAN);
           else if (color == -1) clog << Ansi::r(COLOR_MAGENTA);
@@ -192,8 +299,8 @@ namespace ₿ {
         wattroff(stdlog, COLOR_PAIR(COLOR_WHITE));
         wrefresh(stdlog);
       };
-      static void logWar(const string &prefix, const string &reason) {
-        if (!display) {
+      void logWar(const string &prefix, const string &reason) const {
+        if (!display.terminal) {
           clog << stamp()
                << prefix          << Ansi::r(COLOR_RED)
                << " Warrrrning: " << Ansi::b(COLOR_RED)
@@ -218,156 +325,40 @@ namespace ₿ {
         wattroff(stdlog, COLOR_PAIR(COLOR_WHITE));
         wrefresh(stdlog);
       };
-  };
-
-  WINDOW *Print::stdlog = nullptr;
-
-  Margin Print::margin = {ANY_NUM, 0, 0, 0};
-
-  void (*Print::display)() = nullptr;
-
-  class Rollout {
-    public:
-      Rollout(/* KMxTWEpb9ig */) {
-        static once_flag rollout;
-        call_once(rollout, version);
-      };
     protected:
-      static void version() {
-        curl_global_init(CURL_GLOBAL_ALL);
-        clog << Ansi::b(COLOR_GREEN) << K_SOURCE
-             << Ansi::r(COLOR_GREEN) << ' ' << K_BUILD << ' ' << K_STAMP << ".\n";
-        const string mods = changelog();
-        const int commits = count(mods.begin(), mods.end(), '\n');
-        clog << Ansi::b(COLOR_GREEN) << K_0_DAY << Ansi::r(COLOR_GREEN) << ' '
-             << (commits
-                 ? '-' + to_string(commits) + "commit"
-                   + string(commits == 1 ? 0 : 1, 's') + '.'
-                 : "(0day)"
-                )
-#ifndef NDEBUG
-            << " with DEBUG MODE enabled"
-#endif
-            << ".\n" << Ansi::r(COLOR_YELLOW) << mods << Ansi::reset();
-      };
-      static string changelog() {
-        string mods;
-        const json diff =
-#ifdef NDEBUG
-          Curl::Web::xfer("https://api.github.com/repos/ctubio/Krypto-trading-bot"
-            "/compare/" + string(K_0_GIT) + "...HEAD", 4L)
-#else
-          json::object()
-#endif
-        ;
-        if (diff.value("ahead_by", 0)
-          and diff.find("commits") != diff.end()
-          and diff.at("commits").is_array()
-        ) for (const json &it : diff.at("commits"))
-          mods += it.value("/commit/author/date"_json_pointer, "").substr(0, 10) + " "
-                + it.value("/commit/author/date"_json_pointer, "").substr(11, 8)
-                + " (" + it.value("sha", "").substr(0, 7) + ") "
-                + it.value("/commit/message"_json_pointer, "").substr(0,
-                  it.value("/commit/message"_json_pointer, "").find("\n\n") + 1
-                );
-        return mods;
-      };
-  };
-
-  class Ending: public Rollout {
-    private:
-      static vector<function<void()>> endingFn;
-    public:
-      Ending() {
-        signal(SIGINT, [](const int) {
-          clog << '\n';
-          raise(SIGQUIT);
-        });
-        signal(SIGQUIT, die);
-        signal(SIGTERM, err);
-        signal(SIGABRT, wtf);
-        signal(SIGSEGV, wtf);
-        signal(SIGUSR1, wtf);
-        signal(SIGPIPE, SIG_IGN);
-      };
-      void ending(const function<void()> &fn) {
-        endingFn.push_back(fn);
-      };
-    private:
-      static void halt(const int code) {
-        vector<function<void()>> happyEndingFn;
-        endingFn.swap(happyEndingFn);
-        for (const auto &it : happyEndingFn) it();
-        Ansi::colorful = 1;
-        clog << Ansi::b(COLOR_GREEN) << 'K'
-             << Ansi::r(COLOR_GREEN) << " exit code "
-             << Ansi::b(COLOR_GREEN) << code
-             << Ansi::r(COLOR_GREEN) << '.'
-             << Ansi::reset() << '\n';
-        EXIT(code);
-      };
-      static void die(const int) {
-        if (epilogue.empty())
-          epilogue = "Excellent decision! "
-                   + Curl::Web::xfer("https://api.icndb.com/jokes/random?escape=javascript&limitTo=[nerdy]", 4L)
-                       .value("/value/joke"_json_pointer, "let's plant a tree instead..");
-        halt(
-          epilogue.find("Errrror") == string::npos
-            ? EXIT_SUCCESS
-            : EXIT_FAILURE
-        );
-      };
-      static void err(const int) {
-        if (epilogue.empty()) epilogue = "Unknown error, no joke.";
-        halt(EXIT_FAILURE);
-      };
-      static void wtf(const int sig) {
-        epilogue = Ansi::r(COLOR_CYAN) + "Errrror: " + strsignal(sig) + ' ';
-        const string mods = changelog();
-        if (mods.empty()) {
-          epilogue += "(Three-Headed Monkey found):\n"                  + epitaph
-            + "- binbuild: " + string(K_SOURCE)                         + ' '
-                             + string(K_BUILD)                          + '\n'
-            + "- lastbeat: " + to_string((float)clock()/CLOCKS_PER_SEC) + '\n'
-#ifndef _WIN32
-            + "- tracelog: " + '\n';
-          void *k[69];
-          size_t jumps = backtrace(k, 69);
-          char **trace = backtrace_symbols(k, jumps);
-          for (;
-            jumps --> 0;
-            epilogue += "  " + to_string(jumps) + ": " + string(trace[jumps]) + '\n'
+      bool windowed() {
+        if (!display.terminal) return false;
+        if (stdlog)
+          error("SH", "Unable to print another window");
+        if (!initscr())
+          error("SH",
+            "Unable to initialize ncurses, try to run in your terminal"
+              "\"export TERM=xterm\", or use --naked argument"
           );
-          free(trace)
-#endif
-          ;
-          epilogue += '\n' + Ansi::b(COLOR_RED) + "Yikes!" + Ansi::r(COLOR_RED)
-            + '\n' + "please copy and paste the error above into a new github issue (noworry for duplicates)."
-            + '\n' + "If you agree, go to https://github.com/ctubio/Krypto-trading-bot/issues/new"
-            + '\n' + '\n';
-        } else
-          epilogue += string("(deprecated K version found).") + '\n'
-            + '\n' + Ansi::b(COLOR_YELLOW) + "Hint!" + Ansi::r(COLOR_YELLOW)
-            + '\n' + "please upgrade to the latest commit; the encountered error may be already fixed at:"
-            + '\n' + mods
-            + '\n' + "If you agree, consider to run \"make latest\" prior further executions."
-            + '\n' + '\n';
-        halt(EXIT_FAILURE);
+        Ansi::default_colors();
+        if (display.padding.top != ANY_NUM) {
+          stdlog = subwin(
+            stdscr,
+            getmaxy(stdscr) - display.padding.bottom - display.padding.top,
+            getmaxx(stdscr) - display.padding.left - display.padding.right,
+            display.padding.top,
+            display.padding.left
+          );
+          scrollok(stdlog, true);
+          idlok(stdlog, true);
+        }
+        signal(SIGWINCH, [](const int) {
+          endwin();
+          refresh();
+          clear();
+        });
+        repaint();
+        return true;
       };
   };
 
-  vector<function<void()>> Ending::endingFn = { []() {
-    if (Print::display) {
-      Print::display = nullptr;
-      beep();
-      endwin();
-    }
-    clog << Print::stamp()
-         << epilogue
-         << string(epilogue.empty() ? 0 : 1, '\n');
-  } };
-
-  class Option {
+  class Option: public Terminal {
+    protected:
     private_friend:
       struct Argument {
        const string  name;
@@ -376,12 +367,12 @@ namespace ₿ {
        const string  help;
       };
     protected:
-      bool autobot = false;
-      pair<vector<Argument>, function<void(
-        unordered_map<string, variant<string, int, double>>&
-      )>> arguments;
+      bool autobot  = false;
+      bool dustybot = false;
+      using MutableUserArguments = unordered_map<string, variant<string, int, double>>;
+      pair<vector<Argument>, function<void(MutableUserArguments&)>> arguments;
     private:
-      unordered_map<string, variant<string, int, double>> args;
+      MutableUserArguments args;
     public:
       template <typename T> const T arg(const string &name) const {
 #ifndef NDEBUG
@@ -390,10 +381,21 @@ namespace ₿ {
         return get<T>(args.at(name));
       };
     protected:
-      void main(int argc, char** argv, const bool &databases, const bool &headless) {
+      void main(Ending *const K, int argc, char** argv, const bool &databases, const bool &headless) {
+        K->ending([&]() {
+          if (display.terminal) {
+            display = {};
+            beep();
+            endwin();
+          }
+          clog << stamp()
+               << epilogue
+               << string(epilogue.empty() ? 0 : 1, '\n');
+        });
         args["autobot"]  = autobot;
+        args["dustybot"] = dustybot;
         args["headless"] = headless;
-        args["naked"]    = !Print::display;
+        args["naked"]    = !display.terminal;
         vector<Argument> long_options = {
           {"help",         "h",      nullptr,  "show this help and quit"},
           {"version",      "v",      nullptr,  "show current build version and quit"},
@@ -402,6 +404,9 @@ namespace ₿ {
         };
         if (!arg<int>("autobot")) long_options.push_back(
           {"autobot",      "1",      nullptr,  "automatically start trading on boot"}
+        );
+        if (!arg<int>("dustybot")) long_options.push_back(
+          {"dustybot",     "1",      nullptr,  "do not automatically cancel all orders on exit"}
         );
         if (!arg<int>("naked")) long_options.push_back(
           {"naked",        "1",      nullptr,  "do not display CLI, print output to stdout instead"}
@@ -441,12 +446,13 @@ namespace ₿ {
           {"maker-fee",    "AMOUNT", "0",      "set custom percentage of maker fee, like '0.1'"},
           {"taker-fee",    "AMOUNT", "0",      "set custom percentage of taker fee, like '0.1'"},
           {"min-size",     "AMOUNT", "0",      "set custom minimum order size, like '0.01'"},
+          {"leverage",     "AMOUNT", "1",      "set between '0.01' and '100' to enable isolated margin,"
+                                               "\n" "or use '0' for cross margin; default AMOUNT is '1'"},
           {"http",         "URL",    "",       "set URL of alernative HTTPS api endpoint for trading"},
           {"wss",          "URL",    "",       "set URL of alernative WSS api endpoint for trading"},
           {"fix",          "URL",    "",       "set URL of alernative FIX api endpoint for trading"},
-          {"dustybot",     "1",      nullptr,  "do not automatically cancel all orders on exit"},
           {"market-limit", "NUMBER", "321",    "set NUMBER of maximum price levels for the orderbook,"
-                                               "\n" "default NUMBER is '321' and the minimum is '15'"}
+                                               "\n" "default NUMBER is '321' and the minimum is '10'"}
         }) long_options.push_back(it);
         for (const Argument &it : arguments.first)
           long_options.push_back(it);
@@ -502,26 +508,26 @@ namespace ₿ {
           error("CF", argerr);
         }
         tidy();
-        Ansi::colorful = arg<int>("colors");
+        colorful = arg<int>("colors");
         if (arguments.second) {
           arguments.second(args);
           arguments.second = nullptr;
         }
         if (arg<int>("naked"))
-          Print::display = nullptr;
+          display = {};
         if (!arg<string>("interface").empty() and !arg<int>("ipv6"))
-          Curl::global_setopt = [&](CURL *curl) {
+          curl_global_setopt = [&](CURL *curl) {
             curl_easy_setopt(curl, CURLOPT_USERAGENT, "K");
             curl_easy_setopt(curl, CURLOPT_INTERFACE, arg<string>("interface").data());
             curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
           };
         else if (!arg<string>("interface").empty())
-          Curl::global_setopt = [&](CURL *curl) {
+          curl_global_setopt = [&](CURL *curl) {
             curl_easy_setopt(curl, CURLOPT_USERAGENT, "K");
             curl_easy_setopt(curl, CURLOPT_INTERFACE, arg<string>("interface").data());
           };
         else if (!arg<int>("ipv6"))
-          Curl::global_setopt = [&](CURL *curl) {
+          curl_global_setopt = [&](CURL *curl) {
             curl_easy_setopt(curl, CURLOPT_USERAGENT, "K");
             curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
           };
@@ -536,7 +542,8 @@ namespace ₿ {
         args["currency"] = Text::strU(arg<string>("currency"));
         args["base"]  = Text::strU(arg<string>("currency").substr(0, arg<string>("currency").find("/")));
         args["quote"] = Text::strU(arg<string>("currency").substr(1+ arg<string>("currency").find("/")));
-        args["market-limit"] = max(15, arg<int>("market-limit"));
+        args["market-limit"] = max(10, arg<int>("market-limit"));
+        args["leverage"] = fmax(0, fmin(100, arg<double>("leverage")));
         if (arg<int>("debug"))
           args["debug-secret"] = 1;
         if (arg<int>("latency"))
@@ -582,7 +589,7 @@ namespace ₿ {
           << Ansi::r(COLOR_GREEN) << "  questions: " << Ansi::r(COLOR_YELLOW) << "https://earn.com/analpaper/" << '\n'
           << Ansi::b(COLOR_GREEN) << "K" << Ansi::r(COLOR_GREEN) << " bugkiller: " << Ansi::r(COLOR_YELLOW) << "https://github.com/ctubio/Krypto-trading-bot/issues/new" << '\n'
           << Ansi::r(COLOR_GREEN) << "  downloads: " << Ansi::r(COLOR_YELLOW) << "ssh://git@github.com/ctubio/Krypto-trading-bot" << '\n'
-          << Ansi::b(COLOR_WHITE) << stamp.at(((++y%4)*3)+x) << "Usage:" << Ansi::b(COLOR_YELLOW) << " " << K_SOURCE << " [arguments]" << '\n';
+          << Ansi::b(COLOR_WHITE) << stamp.at(((++y%4)*3)+x) << "Usage:" << Ansi::b(COLOR_YELLOW) << K_SOURCE " [arguments]" << '\n';
         clog
           << Ansi::b(COLOR_WHITE) << stamp.at(((++y%4)*3)+x) << "[arguments]:";
         for (const Argument &it : long_options) {
@@ -612,53 +619,55 @@ namespace ₿ {
 
   class Hotkey {
     public_friend:
-      class Catch {
+      class Keymap {
         public:
-          Catch(const Hotkey &hotkey, const vector<pair<const char, const function<void()>>> &hotkeys)
+          Keymap(const Hotkey &hotkey, const vector<pair<const char, const function<void()>>> &hotkeys)
           {
             for (const auto &it : hotkeys)
               hotkey.keymap(it.first, it.second);
           };
       };
+    public:
+      ~Hotkey()
+      {
+        stop = true;
+      };
     private:
-      Loop::Async* event = nullptr;
-      future<char> keylogger;
-      mutable unordered_map<char, function<void()>> hotFn;
+      bool stop = false;
+      Loop::Async::Event<char> keylogger;
+      mutable unordered_map<char, function<void()>> maps;
     protected:
-      void legit_keylogger(Loop::Async *e) {
-        event = e;
-        if (hotFn.empty()) return;
-        if (keylogger.valid())
+      void wait_for_keylog(Loop *const loop) {
+        if (maps.empty()) return;
+        if (keylogger.write)
           error("SH", string("Unable to launch another \"keylogger\" thread"));
         noecho();
         halfdelay(5);
         keypad(stdscr, true);
-        launch_keylogger();
-      };
-      void keylog() {
-        if (keylogger.valid()) {
-          const char ch = keylogger.get();
-          if (hotFn.find(ch) != hotFn.end())
-            hotFn.at(ch)();
-          launch_keylogger();
-        }
+        keylogger.write = [&](const char &ch) { keylog(ch); };
+        keylogger.wait_for(loop, [&]() { return sync_keylogger(); });
+        keylogger.ask_for();
       };
     private:
       void keymap(const char &ch, function<void()> fn) const {
-        if (hotFn.find(ch) != hotFn.end())
+        if (maps.find(ch) != maps.end())
           error("SH", string("Too many handlers for \"") + ch + "\" hotkey event");
-        hotFn[ch] = fn;
+        maps[ch] = fn;
       };
-      void launch_keylogger() {
-        keylogger = ::async(launch::async, [&]() {
-          int ch = ERR;
-          while (ch == ERR and Print::display)
-            ch = getch();
-          event->wakeup();
-          return ch == ERR
-               ? '\r'
-               : (char)ch;
-        });
+      void keylog(const char &ch) {
+        if (maps.find(ch) != maps.end())
+          maps.at(ch)();
+        keylogger.ask_for();
+      };
+      vector<char> sync_keylogger() {
+        int ch = ERR;
+        while (ch == ERR and !stop)
+          ch = getch();
+        return {
+          ch == ERR
+           ? '\r'
+           : (char)ch
+        };
       };
   };
 
@@ -692,11 +701,7 @@ namespace ₿ {
       class Backup: public Blob {
         public:
           using Report = pair<bool, string>;
-          function<void()> push
-#ifndef NDEBUG
-            = [this]() { WARN("Y U NO catch " << (char)about() << " sqlite push?"); }
-#endif
-          ;
+          function<void()> push;
         public:
           Backup(const Sqlite &sqlite)
           {
@@ -798,18 +803,23 @@ namespace ₿ {
       string disk = "main";
       mutable vector<Backup*> tables;
     protected:
-      void backups(const string &database, const string &diskdata) {
-        if (sqlite3_open(database.data(), &db))
+      void backups(const Option *const K) {
+        if (sqlite3_open(K->arg<string>("database").data(), &db))
           error("DB", sqlite3_errmsg(db));
-        Print::log("DB", "loaded OK from", database);
-        if (!diskdata.empty()) {
-          exec("ATTACH '" + diskdata + "' AS " + (disk = "disk") + ";");
-          Print::log("DB", "loaded OK from", diskdata);
+        K->log("DB", "loaded OK from", K->arg<string>("database"));
+        if (!K->arg<string>("diskdata").empty()) {
+          exec("ATTACH '" + K->arg<string>("diskdata") + "' AS " + (disk = "disk") + ";");
+            K->log("DB", "loaded OK from", K->arg<string>("diskdata"));
         }
         exec("PRAGMA " + disk + ".journal_mode = WAL;"
              "PRAGMA " + disk + ".synchronous = NORMAL;");
         for (auto &it : tables) {
-          report(it->pull(select(it)));
+          const Backup::Report note = it->pull(select(it));
+          if (!note.second.empty()) {
+            if (note.first)
+              K->logWar("DB", note.second);
+            else K->log("DB", note.second);
+          }
           it->push = [this, it]() {
             insert(it);
           };
@@ -822,12 +832,6 @@ namespace ₿ {
         tables.clear();
       };
     private:
-      void report(const Backup::Report note) const {
-        if (note.second.empty()) return;
-        if (note.first)
-          Print::logWar("DB", note.second);
-        else Print::log("DB", note.second);
-      };
       json select(Backup *const data) {
         const string table = schema(data);
         json result = json::array();
@@ -878,10 +882,10 @@ namespace ₿ {
           ? "DELETE FROM " + table + " WHERE time < " + to_string(Tstamp - lifetime) + ";"
           : "";
       };
-      void exec(const string &sql, json *const result = nullptr) {              // Print::log("DB DEBUG", sql);
+      void exec(const string &sql, json *const result = nullptr) {
         char* zErrMsg = nullptr;
         sqlite3_exec(db, sql.data(), result ? write : nullptr, (void*)result, &zErrMsg);
-        if (zErrMsg) Print::logWar("DB", "SQLite error: " + (zErrMsg + (" at " + sql)));
+        if (zErrMsg) error("DB", "SQLite error: " + (zErrMsg + (" at " + sql)));
         sqlite3_free(zErrMsg);
       };
       static int write(void *result, int argc, char **argv, char**) {
@@ -895,11 +899,7 @@ namespace ₿ {
     public_friend:
       class Readable: public Blob {
         public:
-          function<void()> read
-#ifndef NDEBUG
-          = [this]() { WARN("Y U NO catch " << (char)about() << " read?"); }
-#endif
-          ;
+          function<void()> read;
         public:
           Readable(const Client &client)
           {
@@ -959,30 +959,26 @@ namespace ₿ {
           virtual void click(const json&) = 0;
       };
       class Clicked {
-        public_friend:
-          class Catch {
-            public:
-              Catch(const Client &client, const vector<pair<const Clickable*, variant<
-                const function<void()>,
-                const function<void(const json&)>
-              >>> &clicked)
-              {
-                for (const auto &it : clicked)
-                  client.clicked(
-                    it.first,
-                    holds_alternative<const function<void()>>(it.second)
-                      ? [it](const json&) { get<const function<void()>>(it.second)(); }
-                      : get<const function<void(const json&)>>(it.second)
-                  );
-              };
+        public:
+          Clicked(const Client &client, const vector<pair<const Clickable*, variant<
+            const function<void()>,
+            const function<void(const json&)>
+          >>> &clicked)
+          {
+            for (const auto &it : clicked)
+              client.clicked(
+                it.first,
+                holds_alternative<const function<void()>>(it.second)
+                  ? [it](const json&) { get<const function<void()>>(it.second)(); }
+                  : get<const function<void(const json&)>>(it.second)
+              );
           };
       };
-    public:
-      string protocol;
-      string wtfismyip = "localhost";
     protected:
+      string wtfismyip = "localhost";
       unordered_map<string, pair<const char*, const int>> documents;
     private:
+      string protocol = "HTTP";
       WebServer::Backend server;
       const Option *option = nullptr;
       mutable unsigned int delay = 0;
@@ -994,28 +990,33 @@ namespace ₿ {
       unordered_map<char, function<void(const json&)>> kisses;
       unordered_map<char, string> queue;
     public:
-      void listen(const Option *const o, const curl_socket_t &loopfd) {
-        option = o;
+      void listen(const Option *const K, const curl_socket_t &loopfd) {
+        option = K;
         if (!server.listen(
           loopfd,
-          option->arg<string>("interface"),
-          option->arg<int>("port"),
-          option->arg<int>("ipv6"),
+          K->arg<string>("interface"),
+          K->arg<int>("port"),
+          K->arg<int>("ipv6"),
           {
-            option->arg<string>("B64auth"),
+            K->arg<string>("B64auth"),
             response,
             upgrade,
             message
           }
-        )) error("UI", "Unable to listen at port number " + to_string(option->arg<int>("port"))
+        )) error("UI", "Unable to listen at port number " + to_string(K->arg<int>("port"))
              + " (may be already in use by another program)");
-        if (!option->arg<int>("without-ssl"))
+        if (!K->arg<int>("without-ssl"))
           for (const auto &it : server.ssl_context(
-            option->arg<string>("ssl-crt"),
-            option->arg<string>("ssl-key")
-          )) Print::logWar("UI", it);
+            K->arg<string>("ssl-crt"),
+            K->arg<string>("ssl-key")
+          )) K->logWar("UI", it);
         protocol  = server.protocol();
-        Print::log("UI", "ready at", Text::strL(protocol) + "://" + wtfismyip + ":" + to_string(option->arg<int>("port")));
+        K->log("UI", "ready at", location());
+      };
+      string location() const {
+        return option
+          ? Text::strL(protocol) + "://" + wtfismyip + ":" + to_string(option->arg<int>("port"))
+          : "loading..";
       };
       void clicked(const Clickable *data, const json &j = nullptr) const {
         if (clickFn.find(data) != clickFn.end())
@@ -1054,7 +1055,7 @@ namespace ₿ {
         clickable.clear();
         documents.clear();
       };
-      void withoutGoodbye() {
+      void without_goodbye() {
         server.purge();
       };
     private:
@@ -1072,7 +1073,7 @@ namespace ₿ {
           and !option->arg<string>("whitelist").empty()
           and option->arg<string>("whitelist").find(addr) == string::npos
         ) {
-          Print::log("UI", "dropping gzip bomb on", addr);
+          option->log("UI", "dropping gzip bomb on", addr);
           return true;
         }
         return false;
@@ -1086,10 +1087,10 @@ namespace ₿ {
         unsigned int code = 200;
         const string leaf = path.substr(path.find_last_of('.') + 1);
         if (papersplease and auth.empty()) {
-          Print::log("UI", "authorization attempt from", addr);
+          option->log("UI", "authorization attempt from", addr);
           code = 401;
         } else if (papersplease and auth != option->arg<string>("B64auth")) {
-          Print::log("UI", "authorization failed from", addr);
+          option->log("UI", "authorization failed from", addr);
           code = 403;
         } else if (leaf != "/" or server.clients() < option->arg<int>("client-limit")) {
           if (documents.find(path) == documents.end())
@@ -1099,7 +1100,7 @@ namespace ₿ {
           if (documents.find(path) != documents.end()) {
             content = string(documents.at(path).first,
                              documents.at(path).second);
-            if (leaf == "/") Print::log("UI", "authorization success from", addr);
+            if (leaf == "/") option->log("UI", "authorization success from", addr);
             else if (leaf == "js")  type = "application/javascript; charset=UTF-8";
             else if (leaf == "css") type = "text/css; charset=UTF-8";
             else if (leaf == "ico") type = "image/x-icon";
@@ -1107,11 +1108,11 @@ namespace ₿ {
           } else {
             if (Random::int64() % 21)
               code = 404, content = "Today, is a beautiful day.";
-            else // Humans! go to any random path to check your luck
+            else // Humans! go to any random path to check your luck.
               code = 418, content = "Today, is your lucky day!";
           }
         } else {
-          Print::log("UI", "--client-limit=" + to_string(option->arg<int>("client-limit"))
+          option->log("UI", "--client-limit=" + to_string(option->arg<int>("client-limit"))
             + " reached by", addr);
           content = "Thank you! but our princess is already in this castle!"
                     "<br/>" "Refresh the page anytime to retry.";
@@ -1120,10 +1121,10 @@ namespace ₿ {
       };
       WebServer::Upgrade upgrade = [&](const int &sum, const string &addr) {
         const int tentative = server.clients() + sum;
-        Print::log("UI", to_string(tentative) + " client" + string(tentative == 1 ? 0 : 1, 's')
+        option->log("UI", to_string(tentative) + " client" + string(tentative == 1 ? 0 : 1, 's')
           + (sum > 0 ? "" : " remain") + " connected, last connection was from", addr);
         if (tentative > option->arg<int>("client-limit")) {
-          Print::log("UI", "--client-limit=" + to_string(option->arg<int>("client-limit"))
+          option->log("UI", "--client-limit=" + to_string(option->arg<int>("client-limit"))
             + " reached by", addr);
           return 0;
         }
@@ -1152,24 +1153,7 @@ namespace ₿ {
       };
   };
 
-  //! \brief Placeholder to avoid spaghetti codes.
-  //! - Walks through minimal runtime steps when wait() is called.
-  class Klass {
-    protected:
-      virtual void waitData () {};
-      virtual void waitAdmin(){};
-      virtual void run      () {};
-    public:
-      void wait() {
-        waitData();
-        waitAdmin();
-        run();
-      };
-  };
-
-  class KryptoNinja: public Klass,
-                     public Print,
-                     public Epoll,
+  class KryptoNinja: public Events,
                      public Ending,
                      public Option,
                      public Hotkey,
@@ -1177,16 +1161,16 @@ namespace ₿ {
                      public Client {
     public:
       Gw *gateway = nullptr;
+    protected:
+      vector<variant<TimeEvent, Gw::DataEvent>> events;
     public:
       KryptoNinja *main(int argc, char** argv) {
         {
-          Option::main(argc, argv, databases, documents.empty());
+          Option::main(this, argc, argv, databases, documents.empty());
           setup();
         } {
           if (windowed())
-            legit_keylogger(async([&]() {
-              keylog();
-            }));
+            wait_for_keylog(this);
         } {
           log("CF", "Outbound IP address is",
             wtfismyip = Curl::Web::xfer("https://wtfismyip.com/json", 4L)
@@ -1203,12 +1187,18 @@ namespace ₿ {
               + " (consider to repeat a few times this check)");
           }
         } {
-          gateway->waitForData((Loop*)this);
+          for (const auto &it : events)
+            if (holds_alternative<Gw::DataEvent>(it))
+              gateway->data(get<Gw::DataEvent>(it));
+        } {
+          gateway->wait_for_data(this);
           timer_1s([&](const unsigned int &tick) {
-            gateway->askForData(tick);
+            gateway->ask_for_data(tick);
           });
           ending([&]() {
-            gateway->end(arg<int>("dustybot"));
+            if (!dustybot)
+              gateway->purge(arg<int>("dustybot"));
+            gateway->end();
             end();
           });
           handshake({
@@ -1220,21 +1210,23 @@ namespace ₿ {
                           : "no"           }
           });
         } {
+          for (const auto &it : events)
+            if (holds_alternative<TimeEvent>(it))
+              timer_1s(get<TimeEvent>(it));
+          events.clear();
+        } {
           if (databases)
-            backups(
-              arg<string>("database"),
-              arg<string>("diskdata")
-            );
+            backups(this);
           else blackhole();
         } {
           if (arg<int>("headless")) headless();
           else {
-            listen((Option*)this, poll());
+            listen(this, poll());
             timer_1s([&](const unsigned int &tick) {
               broadcast(tick);
             });
             ending([&]() {
-              withoutGoodbye();
+              without_goodbye();
             });
             welcome();
           }
@@ -1247,19 +1239,13 @@ namespace ₿ {
         }
         return this;
       };
-      void wait(Klass *const k = nullptr) {
-        if (k) k->wait();
-        else Klass::wait();
-        if (gateway->ready())
-          walk();
+      void wait() {
+        walk();
       };
-      void handshake(const GwExchange::Report &notes = {}) {
-        const json reply = gateway->handshake(arg<int>("nocache"));
-        if (!gateway->tickPrice or !gateway->tickSize or !gateway->minSize)
-          error("GW", "Unable to fetch data from " + gateway->exchange
-            + " for symbols " + gateway->base + "/" + gateway->quote
-            + ", possible error message: " + reply.dump());
-        gateway->report(notes, arg<int>("nocache"));
+      unsigned int dbSize() const {
+        if (!databases or arg<string>("database") == ":memory:") return 0;
+        struct stat st;
+        return stat(arg<string>("database").data(), &st) ? 0 : st.st_size;
       };
       unsigned int memSize() const {
 #ifdef _WIN32
@@ -1269,12 +1255,15 @@ namespace ₿ {
         return getrusage(RUSAGE_SELF, &ru) ? 0 : ru.ru_maxrss * 1e+3;
 #endif
       };
-      unsigned int dbSize() const {
-        if (!databases or arg<string>("database") == ":memory:") return 0;
-        struct stat st;
-        return stat(arg<string>("database").data(), &st) ? 0 : st.st_size;
-      };
     private:
+      void handshake(const GwExchange::Report &notes = {}) {
+        const json reply = gateway->handshake(arg<int>("nocache"));
+        if (!gateway->tickPrice or !gateway->tickSize or !gateway->minSize)
+          error("GW", "Unable to fetch data from " + gateway->exchange
+            + " for symbols " + gateway->base + "/" + gateway->quote
+            + ", possible error message: " + reply.dump());
+        gateway->report(notes, arg<int>("nocache"));
+      };
       void setup() {
         if (!(gateway = Gw::new_Gw(arg<string>("exchange"))))
           error("CF",
@@ -1282,7 +1271,7 @@ namespace ₿ {
               + arg<string>("exchange") + " argument"
           );
         epitaph = "- exchange: " + (gateway->exchange = arg<string>("exchange")) + '\n'
-                + "- currency: " + (gateway->base     = arg<string>("base"))     + " .. "
+                + "- currency: " + (gateway->base     = arg<string>("base"))     + "/"
                                  + (gateway->quote    = arg<string>("quote"))    + '\n';
         if (!gateway->http.empty() and !arg<string>("http").empty())
           gateway->http    = arg<string>("http");
@@ -1296,6 +1285,7 @@ namespace ₿ {
           gateway->makeFee = arg<double>("maker-fee") / 1e+2;
         if (arg<double>("min-size"))
           gateway->minSize = arg<double>("min-size");
+        gateway->leverage  = arg<double>("leverage");
         gateway->apikey    = arg<string>("apikey");
         gateway->secret    = arg<string>("secret");
         gateway->pass      = arg<string>("passphrase");
@@ -1304,9 +1294,10 @@ namespace ₿ {
         gateway->loopfd    = poll();
         gateway->printer   = [&](const string &prefix, const string &reason, const string &highlight) {
           if (reason.find("Error") != string::npos)
-            Print::logWar(prefix, reason);
-          else Print::log(prefix, reason, highlight);
+            logWar(prefix, reason);
+          else log(prefix, reason, highlight);
         };
+        gateway->adminAgreement = (Connectivity)arg<int>("autobot");
       };
   };
 }

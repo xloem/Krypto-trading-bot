@@ -63,12 +63,6 @@ export enum TimeInForce { GTC, IOC, FOK }
 export enum OrderStatus { Waiting, Working, Terminated }
 export enum Liquidity { Make, Take }
 
-export interface ProductState {
-    advert: ProductAdvertisement;
-    fixedPrice: number;
-    fixedSize: number;
-}
-
 export interface IStdev {
     fv: number;
     fvMean: number;
@@ -171,6 +165,7 @@ export class TwoSidedQuoteStatus {
 }
 
 export enum QuotingMode { Top, Mid, Join, InverseJoin, InverseTop, HamelinRat, Depth }
+export enum OrderPctTotal { Value, Side, TBPValue, TBPSide }
 export enum QuotingSafety { Off, PingPong, PingPoing, Boomerang, AK47 }
 export enum FairValueModel { BBO, wBBO, rwBBO }
 export enum AutoPositionMode { Manual, EWMA_LS, EWMA_LMS, EWMA_4 }
@@ -188,6 +183,7 @@ export interface QuotingParameters {
     widthPongPercentage?: number;
     widthPercentage?: boolean;
     bestWidth?: boolean;
+    orderPctTotal?: OrderPctTotal;
     buySize?: any;
     buySizePercentage?: number;
     buySizeMax?: boolean;
@@ -244,7 +240,7 @@ export interface QuotingParameters {
 }
 
 export class ProductAdvertisement {
-    constructor(public exchange: string, public inet: string, public base: string, public quote: string, public environment: string, public matryoshka: string, public tickPrice: number, public tickSize: number, public minSize: number) { }
+    constructor(public exchange: string, public inet: string, public base: string, public quote: string, public symbol: string, public margin: number, public webMarket: string, public webOrders: string, public environment: string, public matryoshka: string, public tickPrice: number, public tickSize: number, public stepPrice: number, public stepSize: number, public minSize: number) { }
 }
 
 export class ApplicationState {

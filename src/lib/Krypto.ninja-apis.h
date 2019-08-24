@@ -9,41 +9,42 @@ namespace ₿ {
   enum class         Side: unsigned int { Bid, Ask };
   enum class  TimeInForce: unsigned int { GTC, IOC, FOK };
   enum class    OrderType: unsigned int { Limit, Market };
+  enum class       Future: unsigned int { Spot, Inverse, Linear };
 
-  struct mLevel {
+  struct Level {
      Price price = 0;
     Amount size  = 0;
   };
-  static void to_json(json &j, const mLevel &k) {
+  static void to_json(json &j, const Level &k) {
     j = {
       {"price", k.price}
     };
     if (k.size) j["size"] = k.size;
   };
-  struct mLevels {
-    vector<mLevel> bids,
-                   asks;
+  struct Levels {
+    vector<Level> bids,
+                  asks;
   };
-  static void to_json(json &j, const mLevels &k) {
+  static void to_json(json &j, const Levels &k) {
     j = {
       {"bids", k.bids},
       {"asks", k.asks}
     };
   };
 
-  struct mWallet {
+  struct Wallet {
     string currency = "";
     Amount amount   = 0,
            held     = 0,
            total    = 0,
            value    = 0;
     double profit   = 0;
-    static void reset(const Amount &a, const Amount &h, mWallet *const wallet) {
+    static void reset(const Amount &a, const Amount &h, Wallet *const wallet) {
       wallet->total = (wallet->amount = a)
                     + (wallet->held   = h);
     };
   };
-  static void to_json(json &j, const mWallet &k) {
+  static void to_json(json &j, const Wallet &k) {
     j = {
       {"amount", k.amount},
       {  "held", k.held  },
@@ -51,24 +52,24 @@ namespace ₿ {
       {"profit", k.profit}
     };
   };
-  struct mWallets {
-    mWallet base,
-            quote;
+  struct Wallets {
+    Wallet base,
+           quote;
   };
-  static void to_json(json &j, const mWallets &k) {
+  static void to_json(json &j, const Wallets &k) {
     j = {
       { "base", k.base },
       {"quote", k.quote}
     };
   };
 
-  struct mTrade {
+  struct Trade {
       Side side     = (Side)0;
      Price price    = 0;
     Amount quantity = 0;
      Clock time     = 0;
   };
-  static void to_json(json &j, const mTrade &k) {
+  static void to_json(json &j, const Trade &k) {
     j = {
       {    "side", k.side    },
       {   "price", k.price   },
@@ -77,17 +78,21 @@ namespace ₿ {
     };
   };
 
-  struct mOrder: public mTrade {
-           bool isPong          = false;
-         string orderId         = "",
-                exchangeId      = "";
-         Status status          = (Status)0;
-         Amount tradeQuantity   = 0;
-      OrderType type            = (OrderType)0;
-    TimeInForce timeInForce     = (TimeInForce)0;
-           bool disablePostOnly = false;
-          Clock latency         = 0;
-    static void update(const mOrder &raw, mOrder *const order) {
+  struct Order {
+           Side side        = (Side)0;
+          Price price       = 0;
+         Amount quantity    = 0;
+          Clock time        = 0;
+           bool isPong      = false;
+         string orderId     = "",
+                exchangeId  = "";
+         Status status      = (Status)0;
+         Amount filled      = 0;
+      OrderType type        = (OrderType)0;
+    TimeInForce timeInForce = (TimeInForce)0;
+           bool postOnly    = true;
+          Clock latency     = 0;
+    static void update(const Order &raw, Order *const order) {
       if (!order) return;
       if (Status::Working == (     order->status     = raw.status
       ) and !order->latency)       order->latency    = raw.time - order->time;
@@ -96,7 +101,7 @@ namespace ₿ {
       if (raw.price)               order->price      = raw.price;
       if (raw.quantity)            order->quantity   = raw.quantity;
     };
-    static bool replace(const Price &price, const bool &isPong, mOrder *const order) {
+    static bool replace(const Price &price, const bool &isPong, Order *const order) {
       if (!order
         or order->exchangeId.empty()
       ) return false;
@@ -105,7 +110,7 @@ namespace ₿ {
       order->time   = Tstamp;
       return true;
     };
-    static bool cancel(mOrder *const order) {
+    static bool cancel(Order *const order) {
       if (!order
         or order->exchangeId.empty()
         or order->status == Status::Waiting
@@ -115,23 +120,23 @@ namespace ₿ {
       return true;
     };
   };
-  static void to_json(json &j, const mOrder &k) {
+  static void to_json(json &j, const Order &k) {
     j = {
-      {        "orderId", k.orderId        },
-      {     "exchangeId", k.exchangeId     },
-      {           "side", k.side           },
-      {       "quantity", k.quantity       },
-      {           "type", k.type           },
-      {         "isPong", k.isPong         },
-      {          "price", k.price          },
-      {    "timeInForce", k.timeInForce    },
-      {         "status", k.status         },
-      {"disablePostOnly", k.disablePostOnly},
-      {           "time", k.time           },
-      {        "latency", k.latency        }
+      {    "orderId", k.orderId    },
+      { "exchangeId", k.exchangeId },
+      {       "side", k.side       },
+      {   "quantity", k.quantity   },
+      {       "type", k.type       },
+      {     "isPong", k.isPong     },
+      {      "price", k.price      },
+      {"timeInForce", k.timeInForce},
+      {     "status", k.status     },
+      {   "postOnly", k.postOnly   },
+      {       "time", k.time       },
+      {    "latency", k.latency    }
     };
   };
-  static void from_json(const json &j, mOrder &k) {
+  static void from_json(const json &j, Order &k) {
     k.price           = j.value("price", 0.0);
     k.quantity        = j.value("quantity", 0.0);
     k.side            = j.value("side", "") == "Bid"
@@ -146,52 +151,46 @@ namespace ₿ {
                             ? TimeInForce::FOK
                             : TimeInForce::IOC);
     k.isPong          = false;
-    k.disablePostOnly = true;
+    k.postOnly        = false;
   };
 
   class GwExchangeData {
     public_friend:
-      class Decimal {
-        public:
-          stringstream stream;
-        public:
-          Decimal()
-          {
-            stream << fixed;
-          };
-          double round(const double &input) const {
-            const double points = pow(10, -1 * stream.precision());
-            return ::round(input / points) * points;
-          };
-          double floor(const double &input) const {
-            const double points = pow(10, -1 * stream.precision());
-            return ::floor(input / points) * points;
-          };
-          string str(const double &input) {
-            stream.str("");
-            stream << round(input);
-            return stream.str();
-          };
-      };
+      using DataEvent = variant<
+        function<void(const Connectivity&)>,
+        function<void(const Wallets&)>,
+        function<void(const Levels&)>,
+        function<void(const Order&)>,
+        function<void(const Trade&)>
+      >;
     public:
+      curl_socket_t loopfd = 0;
       struct {
-        Decimal price,
+        Decimal funds,
+                price,
                 amount,
                 percent;
       } decimal;
-      curl_socket_t loopfd = 0;
-      function<void(const mOrder&)>       write_mOrder;
-      function<void(const mTrade&)>       write_mTrade;
-      function<void(const mLevels&)>      write_mLevels;
-      function<void(const mWallets&)>     write_mWallets;
-      function<void(const Connectivity&)> write_Connectivity;
       bool askForFees      = false,
            askForReplace   = false,
            askForCancelAll = false;
       string (*randId)() = nullptr;
-      virtual void askForData(const unsigned int &tick) = 0;
-      virtual void waitForData(Loop *const loop) = 0;
-      void place(const mOrder *const order) {
+      virtual void ask_for_data(const unsigned int &tick) = 0;
+      virtual void wait_for_data(Loop *const loop) = 0;
+      void data(const DataEvent &ev) {
+        if (holds_alternative<function<void(const Connectivity&)>>(ev))
+          async.connectivity.write = get<function<void(const Connectivity&)>>(ev);
+        else if (holds_alternative<function<void(const Wallets&)>>(ev))
+          async.wallets.write      = get<function<void(const Wallets&)>>(ev);
+        else if (holds_alternative<function<void(const Levels&)>>(ev))
+          async.levels.write       = get<function<void(const Levels&)>>(ev);
+        else if (holds_alternative<function<void(const Order&)>>(ev))
+          async.orders.write       =
+          async.cancelAll.write    = get<function<void(const Order&)>>(ev);
+        else if (holds_alternative<function<void(const Trade&)>>(ev))
+          async.trades.write       = get<function<void(const Trade&)>>(ev);
+      };
+      void place(const Order *const order) {
         place(
           order->orderId,
           order->side,
@@ -199,109 +198,90 @@ namespace ₿ {
           decimal.amount.str(order->quantity),
           order->type,
           order->timeInForce,
-          order->disablePostOnly
+          order->postOnly
         );
       };
-      void replace(const mOrder *const order) {
+      void replace(const Order *const order) {
         replace(
           order->exchangeId,
           decimal.price.str(order->price)
         );
       };
-      void cancel(const mOrder *const order) {
+      void cancel(const Order *const order) {
         cancel(
           order->orderId,
           order->exchangeId
         );
       };
 //BO non-free Gw library functions from build-*/local/lib/K-*.a (it just redefines all virtual gateway class members below).
-/**/  virtual bool   ready() = 0;                                            // wait for exchange and register data handlers
 /**/  virtual void replace(string, string) {};                               // call         async orders data from exchange
 /**/  virtual void   place(string, Side, string, string, OrderType, TimeInForce, bool) = 0; // async orders like above/below
 /**/  virtual void  cancel(string, string) = 0;                              // call         async orders data from exchange
 /**/protected:
 /**/  virtual             bool async_wallet()    { return false; };          // call         async wallet data from exchange
 /**/  virtual             bool async_cancelAll() { return false; };          // call         async orders data from exchange
-/**/  virtual vector<mWallets>  sync_wallet()    { return {}; };             // call and read sync wallet data from exchange
-/**/  virtual  vector<mLevels>  sync_levels()    { return {}; };             // call and read sync levels data from exchange
-/**/  virtual   vector<mTrade>  sync_trades()    { return {}; };             // call and read sync trades data from exchange
-/**/  virtual   vector<mOrder>  sync_orders()    { return {}; };             // call and read sync orders data from exchange
-/**/  virtual   vector<mOrder>  sync_cancelAll() { return {}; };             // call and read sync orders data from exchange
+/**/  virtual vector<Wallets>   sync_wallet()    { return {}; };             // call and read sync wallet data from exchange
+/**/  virtual  vector<Levels>   sync_levels()    { return {}; };             // call and read sync levels data from exchange
+/**/  virtual   vector<Trade>   sync_trades()    { return {}; };             // call and read sync trades data from exchange
+/**/  virtual   vector<Order>   sync_orders()    { return {}; };             // call and read sync orders data from exchange
+/**/  virtual   vector<Order>   sync_cancelAll() { return {}; };             // call and read sync orders data from exchange
 //EO non-free Gw library functions from build-*/local/lib/K-*.a (it just redefines all virtual gateway class members above).
+      struct {
+        Loop::Async::Event<Wallets>      wallets;
+        Loop::Async::Event<Levels>       levels;
+        Loop::Async::Event<Trade>        trades;
+        Loop::Async::Event<Order>        orders,
+                                         cancelAll;
+        Loop::Async::Event<Connectivity> connectivity;
+      } async;
       void online(const Connectivity &connectivity = Connectivity::Connected) {
-        if (write_Connectivity)
-          write_Connectivity(connectivity);
+        async.connectivity.try_write(connectivity);
+        if (!(bool)connectivity)
+          async.levels.try_write({});
       };
-      void askForNeverAsyncData(const unsigned int &tick) {
+      void wait_for_never_async_data(Loop *const loop) {
+        async.wallets.wait_for(loop,   [&]() { return sync_wallet(); });
+        async.cancelAll.wait_for(loop, [&]() { return sync_cancelAll(); });
+      };
+      void wait_for_sync_data(Loop *const loop) {
+        async.orders.wait_for(loop,    [&]() { return sync_orders(); });
+        wait_for_never_async_data(loop);
+        async.levels.wait_for(loop,    [&]() { return sync_levels(); });
+        async.trades.wait_for(loop,    [&]() { return sync_trades(); });
+      };
+      void ask_for_never_async_data(const unsigned int &tick) {
         if (((askForFees and !(askForFees = false))
           or !(tick % 15))
-          and !async_wallet())    askFor(replyWallets,   eventWallets,   [&]() { return sync_wallet(); });
+          and !async_wallet())    async.wallets.ask_for();
         if ((askForCancelAll
           and !(tick % 300))
-          and !async_cancelAll()) askFor(replyCancelAll, eventCancelAll, [&]() { return sync_cancelAll(); });
+          and !async_cancelAll()) async.cancelAll.ask_for();
       };
-      void askForSyncData(const unsigned int &tick) {
-        if (!(tick % 2))          askFor(replyOrders,    eventOrders,    [&]() { return sync_orders(); });
-        askForNeverAsyncData(tick);
-        if (!(tick % 3))          askFor(replyLevels,    eventLevels,    [&]() { return sync_levels(); });
-        if (!(tick % 60))         askFor(replyTrades,    eventTrades,    [&]() { return sync_trades(); });
-      };
-      void waitForNeverAsyncData(Loop *const loop) {
-        eventWallets   = loop->async([&]() { waitFor(replyWallets,   write_mWallets); });
-        eventCancelAll = loop->async([&]() { waitFor(replyCancelAll, write_mOrder); });
-      };
-      void waitForSyncData(Loop *const loop) {
-        eventOrders    = loop->async([&]() { waitFor(replyOrders,    write_mOrder); });
-        waitForNeverAsyncData(loop);
-        eventLevels    = loop->async([&]() { waitFor(replyLevels,    write_mLevels); });
-        eventTrades    = loop->async([&]() { waitFor(replyTrades,    write_mTrade); });
-      };
-    private:
-      Loop::Async* eventWallets   = nullptr;
-      Loop::Async* eventLevels    = nullptr;
-      Loop::Async* eventTrades    = nullptr;
-      Loop::Async* eventOrders    = nullptr;
-      Loop::Async* eventCancelAll = nullptr;
-      future<vector<mWallets>> replyWallets;
-      future<vector<mLevels>>  replyLevels;
-      future<vector<mTrade>>   replyTrades;
-      future<vector<mOrder>>   replyOrders,
-                               replyCancelAll;
-      template<typename T1, typename T2> void askFor(
-              future<vector<T1>> &reply,
-                     Loop::Async *event,
-        const                 T2 &read
-      ) {
-        if (!reply.valid())
-          reply = ::async(launch::async, [this, event, read]() {
-            vector<T1> data = read();
-            event->wakeup();
-            return data;
-          });
-      };
-      template<typename T> void waitFor(
-                     future<vector<T>> &reply,
-        const function<void(const T&)> &write
-      ) {
-        if (reply.valid())
-          for (T &it : reply.get()) write(it);
+      void ask_for_sync_data(const unsigned int &tick) {
+        if (!(tick % 2))          async.orders.ask_for();
+        ask_for_never_async_data(tick);
+        if (!(tick % 3))          async.levels.ask_for();
+        if (!(tick % 60))         async.trades.ask_for();
       };
   };
 
   class GwExchange: public GwExchangeData {
     public:
       using Report = vector<pair<string, string>>;
-      string exchange, apikey, secret, pass,
-             base,     quote,  symbol,
-             http,     ws,     fix,
-             unlock;
+      string exchange,   apikey,    secret, pass,
+             base,       quote,     symbol,
+             http,       ws,        fix,
+             webMarket,  webOrders, unlock;
        Price tickPrice = 0;
       Amount tickSize  = 0,
              minSize   = 0,
              makeFee   = 0,
              takeFee   = 0;
       size_t maxLevel  = 0;
+      double leverage  = 0;
+      Future margin    = (Future)0;
          int debug     = 0;
+      Connectivity adminAgreement = Connectivity::Disconnected;
       virtual void disconnect() {};
       virtual bool connected() const { return true; };
       virtual json handshake() = 0;
@@ -323,14 +303,21 @@ namespace ₿ {
           reply = json::parse(file);
         } else
           reply = handshake();
-        base = reply.value("base", base);
-        quote = reply.value("quote", quote);
-        symbol = reply.value("symbol", symbol);
+        base      = reply.value("base",      base);
+        quote     = reply.value("quote",     quote);
+        symbol    = reply.value("symbol",    symbol);
+        margin    = reply.value("margin",    margin);
+        webMarket = reply.value("webMarket", webMarket);
+        webOrders = reply.value("webOrders", webOrders);
         tickPrice = reply.value("tickPrice", 0.0);
-        tickSize = reply.value("tickSize", 0.0);
+        tickSize  = reply.value("tickSize",  0.0);
         if (!minSize) minSize = reply.value("minSize", 0.0);
         if (!makeFee) makeFee = reply.value("makeFee", 0.0);
         if (!takeFee) takeFee = reply.value("takeFee", 0.0);
+        decimal.funds.precision(1e-8);
+        decimal.price.precision(tickPrice);
+        decimal.amount.precision(tickSize);
+        decimal.percent.precision(1e-2);
         if (!file.is_open()
           and tickPrice and tickSize and minSize
           and !base.empty() and !quote.empty()
@@ -341,30 +328,36 @@ namespace ₿ {
         if (file.is_open()) file.close();
         return reply.value("reply", json::object());
       };
-      void end(const bool &dustybot = false) {
+      void purge(const bool &dustybot) {
         if (dustybot)
           print("--dustybot is enabled, remember to cancel manually any open order.");
-        else if (write_mOrder) {
+        else {
           print("Attempting to cancel all open orders, please wait.");
-          for (mOrder &it : sync_cancelAll()) write_mOrder(it);
+          if (!async_cancelAll()) sync_cancelAll();
           print("cancel all open orders OK");
         }
+      };
+      void end() {
         online(Connectivity::Disconnected);
         disconnect();
       };
       void report(Report notes, const bool &nocache) {
-        decimal.price.stream.precision(abs(log10(tickPrice)));
-        decimal.amount.stream.precision(abs(log10(tickSize)));
-        decimal.percent.stream.precision(2);
+        if (exchange == "NULL") print("all data is random");
         for (auto it : (Report){
-          {"symbols", base + "/" + quote + " ("
-                        + decimal.amount.str(tickSize) + "/"
-                        + decimal.price.str(tickPrice) + ")"                    },
-          {"minSize", decimal.amount.str(minSize) + " " + base                  },
+          {"symbols", (margin == Future::Linear
+                        ? symbol             + " (" + decimal.funds.str(decimal.funds.step)
+                        : base + "/" + quote + " (" + decimal.amount.str(tickSize)
+                      ) + "/"
+                        + decimal.price.str(tickPrice) + ")"                              },
+          {"minSize", decimal.amount.str(minSize) + " " + (
+                        margin == Future::Spot
+                          ? base
+                          : "Contract" + string(minSize == 1 ? 0 : 1, 's')
+                      )                                                                   },
           {"makeFee", decimal.percent.str(makeFee * 1e+2) + "%"
-                        + (makeFee ? "" : " (please use --maker-fee argument!)")},
+                        + (makeFee ? "" : " (please use --maker-fee argument!)")          },
           {"takeFee", decimal.percent.str(takeFee * 1e+2) + "%"
-                        + (takeFee ? "" : " (please use --taker-fee argument!)")}
+                        + (takeFee ? "" : " (please use --taker-fee argument!)")          }
         }) notes.push_back(it);
         string note = "handshake:";
         for (auto &it : notes)
@@ -389,22 +382,20 @@ namespace ₿ {
         print(result);
       };
       void disclaimer() const {
-        if (!unlock.empty())
-          print("was slowdown 7 seconds (--free-version argument was implicitly set):"
-            "\n" "\n" "Your apikey: " + apikey +
-            "\n" "\n" "To unlock it anonymously and to collaborate with"
-            "\n"      "the development, make an acceptable Pull Request"
-            "\n"      "on github.. or send 0.01210000 BTC (or more) to:"
-            "\n" "\n" "  " + unlock +
-            "\n" "\n" "Before restart just wait for 0 confirmations at:"
-            "\n"      "https://live.blockcypher.com/btc/address/" + unlock +
-            "\n" "\n" "DISCLAIMER: This is strict non-violent software:"
-            "\n"      "if you hurt other living creatures, please stop;"
-            "\n"      "otherwise remove all copies of the software now."
-            "\n" "\n" "                     Signed-off-by: Carles Tubio"
-            "\n"      "see: github.com/ctubio/Krypto-trading-bot#unlock"
-            "\n"      "or just use --free-version to hide this message"
-          );
+        if (unlock.empty()) return;
+        print("was slowdown 7 seconds (--free-version argument was implicitly set):"
+          "\n" "\n" "Your apikey: " + apikey +
+          "\n" "\n" "To unlock it anonymously and to collaborate with"
+          "\n"      "the development, make an acceptable Pull Request"
+          "\n"      "on github.. or send 0.01210000 BTC (or more) to:"
+          "\n" "\n" "  " + unlock +
+          "\n" "\n" "Before restart just wait for 0 confirmations at:"
+          "\n"      "https://live.blockcypher.com/btc/address/" + unlock +
+          "\n" "\n" OBLIGATORY_analpaper_SOFTWARE_LICENSE
+          "\n" "\n" "                     Signed-off-by: Carles Tubio"
+          "\n"      "see: github.com/ctubio/Krypto-trading-bot#unlock"
+          "\n"      "or just use --free-version to hide this message"
+        );
       };
       function<void(const string&, const string&, const string&)> printer;
     protected:
@@ -418,11 +409,13 @@ namespace ₿ {
           highlight
         );
       };
-      void reduce(mLevels &levels) {
-        if (maxLevel and levels.bids.size() > maxLevel)
-          levels.bids.erase(levels.bids.begin() + maxLevel, levels.bids.end());
-        if (maxLevel and levels.asks.size() > maxLevel)
-          levels.asks.erase(levels.asks.begin() + maxLevel, levels.asks.end());
+      void reduce(Levels &levels) {
+        if (maxLevel) {
+          if (levels.bids.size() > maxLevel)
+            levels.bids.erase(levels.bids.begin() + maxLevel, levels.bids.end());
+          if (levels.asks.size() > maxLevel)
+            levels.asks.erase(levels.asks.begin() + maxLevel, levels.asks.end());
+        }
       };
   };
 
@@ -435,11 +428,12 @@ namespace ₿ {
 
   class GwApiREST: public Gw {
     public:
-      void askForData(const unsigned int &tick) override {
-        askForSyncData(tick);
+      void ask_for_data(const unsigned int &tick) override {
+        ask_for_sync_data(tick);
       };
-      void waitForData(Loop *const loop) override {
-        waitForSyncData(loop);
+      void wait_for_data(Loop *const loop) override {
+        online();
+        wait_for_sync_data(loop);
       };
   };
   class GwApiWs: public Gw,
@@ -451,14 +445,14 @@ namespace ₿ {
       bool connected() const override {
         return WebSocket::connected();
       };
-      void askForData(const unsigned int &tick) override {
+      void ask_for_data(const unsigned int &tick) override {
         if (countdown and !--countdown)
           connect();
         if (subscribed())
-          askForNeverAsyncData(tick);
+          ask_for_never_async_data(tick);
       };
-      void waitForData(Loop *const loop) override {
-        waitForNeverAsyncData(loop);
+      void wait_for_data(Loop *const loop) override {
+        wait_for_never_async_data(loop);
       };
     protected:
 //BO non-free Gw library functions from build-*/local/lib/K-*.a (it just redefines all virtual gateway class members below).
@@ -469,7 +463,7 @@ namespace ₿ {
         CURLcode rc;
         if (CURLE_OK == (rc = WebSocket::connect(ws)))
           WebSocket::start(GwExchangeData::loopfd, [&]() {
-            waitForAsyncData();
+            wait_for_async_data();
           });
         else reconnect(string("CURL connect Error: ") + curl_easy_strerror(rc));
       };
@@ -508,7 +502,7 @@ namespace ₿ {
         return subscription;
       };
     private:
-      void waitForAsyncData() {
+      void wait_for_async_data() {
         CURLcode rc;
         if (CURLE_OK != (rc = WebSocket::send_recv()))
           print(string("CURL recv Error: ") + curl_easy_strerror(rc));
@@ -537,7 +531,7 @@ namespace ₿ {
           CURLcode rc;
           if (CURLE_OK == (rc = FixSocket::connect(fix, logon()))) {
             FixSocket::start(GwExchangeData::loopfd, [&]() {
-              waitForAsyncData();
+              wait_for_async_data();
             });
             print("FIX success Logon, streaming orders");
           } else reconnect(string("CURL connect FIX Error: ") + curl_easy_strerror(rc));
@@ -555,7 +549,7 @@ namespace ₿ {
           print(string("CURL send FIX Error: ") + curl_easy_strerror(rc));
       };
     private:
-      void waitForAsyncData() {
+      void wait_for_async_data() {
         CURLcode rc;
         if (CURLE_OK != (rc = FixSocket::send_recv()))
           print(string("CURL recv FIX Error: ") + curl_easy_strerror(rc));
@@ -572,13 +566,72 @@ namespace ₿ {
     public:
       json handshake() override {
         return {
-          {     "base", base   },
-          {    "quote", quote  },
-          {"tickPrice", 1e-2   },
-          { "tickSize", 1e-2   },
-          {  "minSize", 1e-2   },
-          {    "reply", nullptr}
+          {     "base", base     },
+          {    "quote", quote    },
+          {   "margin", margin   },
+          {"webMarket", webMarket},
+          {"webOrders", webOrders},
+          {"tickPrice", 1e-2     },
+          { "tickSize", 1e-2     },
+          {  "minSize", 1e-2     },
+          {    "reply", nullptr  }
         };
+      };
+  };
+  class GwBitmex: public GwApiWs {
+    public:
+      GwBitmex()
+      {
+        http   = "https://www.bitmex.com/api/v1";
+        ws     = "wss://www.bitmex.com/realtime";
+        randId = Random::uuid36Id;
+        askForReplace = true;
+        webMarket = "https://www.bitmex.com/app/trade/";
+        webOrders = "https://www.bitmex.com/app/orderHistory";
+      };
+      json handshake() override {
+        symbol = base + quote;
+        webMarket += base + quote;
+        json reply = Curl::Web::xfer(http + "/instrument?symbol=" + symbol);
+        if (reply.is_array()) {
+          if (reply.empty())
+            reply = {
+              {"error", symbol + " is not a valid symbol"}
+            };
+          else
+            for (const json &it : reply) {
+              reply = it;
+              break;
+            }
+        }
+        return {
+          {     "base", "XBT"                          },
+          {    "quote", quote                          },
+          {   "symbol", symbol                         },
+          {   "margin", reply.value("isInverse", false)
+                          ? Future::Inverse
+                          : Future::Linear             },
+          {"webMarket", webMarket                      },
+          {"webOrders", webOrders                      },
+          {"tickPrice", reply.value("tickSize", 0.0)   },
+          { "tickSize", reply.value("lotSize", 0.0)    },
+          {  "minSize", reply.value("lotSize", 0.0)    },
+          {  "makeFee", reply.value("makerFee", 0.0)   },
+          {  "takeFee", reply.value("takerFee", 0.0)   },
+          {    "reply", reply                          }
+        };
+      };
+    protected:
+      static json xfer(const string &url, const string &h1, const string &h2, const string &h3, const string &post, const string &crud) {
+        return Curl::Web::request(url, [&](CURL *curl) {
+          struct curl_slist *h_ = nullptr;
+          h_ = curl_slist_append(h_, ("api-expires: "   + h1).data());
+          h_ = curl_slist_append(h_, ("api-key: "       + h2).data());
+          h_ = curl_slist_append(h_, ("api-signature: " + h3).data());
+          curl_easy_setopt(curl, CURLOPT_HTTPHEADER, h_);
+          curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, crud.data());
+          curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post.data());
+        });
       };
   };
   class GwHitBtc: public GwApiWs {
@@ -588,14 +641,20 @@ namespace ₿ {
         http   = "https://api.hitbtc.com/api/2";
         ws     = "wss://api.hitbtc.com/api/2/ws";
         randId = Random::uuid32Id;
+        webMarket = "https://hitbtc.com/exchange/";
+        webOrders = "https://hitbtc.com/reports/orders";
       };
       json handshake() override {
         symbol = base + quote;
+        webMarket += base + "-to-" + quote;
         const json reply = Curl::Web::xfer(http + "/public/symbol/" + symbol);
         return {
           {     "base", base == "USDT" ? "USD" : base                 },
           {    "quote", quote == "USDT" ? "USD" : quote               },
           {   "symbol", symbol                                        },
+          {"webMarket", webMarket                                     },
+          {"webOrders", webOrders                                     },
+          {   "margin", margin                                        },
           {"tickPrice", stod(reply.value("tickSize", "0"))            },
           { "tickSize", stod(reply.value("quantityIncrement", "0"))   },
           {  "minSize", stod(reply.value("quantityIncrement", "0"))   },
@@ -619,6 +678,8 @@ namespace ₿ {
       {
         http = "https://api.bequant.io/api/2";
         ws   = "wss://api.bequant.io/api/2/ws";
+        webMarket = "https://bequant.io/exchange/";
+        webOrders = "https://bequant.io/reports/orders";
       };
   };
   class GwCoinbase: public GwApiFix {
@@ -630,14 +691,21 @@ namespace ₿ {
         fix    = "fix.pro.coinbase.com:4198";
         target = "Coinbase";
         randId = Random::uuid36Id;
+        webMarket = "https://pro.coinbase.com/trade/";
+        webOrders = "https://pro.coinbase.com/orders/";
       };
       json handshake() override {
         symbol = base + "-" + quote;
+        webMarket += base + quote;
+        webOrders += base + quote;
         const json reply = Curl::Web::xfer(http + "/products/" + symbol);
         return {
           {     "base", base                                     },
           {    "quote", quote                                    },
           {   "symbol", symbol                                   },
+          {   "margin", margin                                   },
+          {"webMarket", webMarket                                },
+          {"webOrders", webOrders                                },
           {"tickPrice", stod(reply.value("quote_increment", "0"))},
           { "tickSize", stod(reply.value("base_increment", "0")) },
           {  "minSize", stod(reply.value("base_min_size", "0"))  },
@@ -648,9 +716,9 @@ namespace ₿ {
       static json xfer(const string &url, const string &h1, const string &h2, const string &h3, const string &h4) {
         return Curl::Web::request(url, [&](CURL *curl) {
           struct curl_slist *h_ = nullptr;
-          h_ = curl_slist_append(h_, ("CB-ACCESS-KEY: " + h1).data());
-          h_ = curl_slist_append(h_, ("CB-ACCESS-SIGN: " + h2).data());
-          h_ = curl_slist_append(h_, ("CB-ACCESS-TIMESTAMP: " + h3).data());
+          h_ = curl_slist_append(h_, ("CB-ACCESS-KEY: "        + h1).data());
+          h_ = curl_slist_append(h_, ("CB-ACCESS-SIGN: "       + h2).data());
+          h_ = curl_slist_append(h_, ("CB-ACCESS-TIMESTAMP: "  + h3).data());
           h_ = curl_slist_append(h_, ("CB-ACCESS-PASSPHRASE: " + h4).data());
           curl_easy_setopt(curl, CURLOPT_HTTPHEADER, h_);
         });
@@ -664,9 +732,12 @@ namespace ₿ {
         ws     = "wss://api.bitfinex.com/ws/2";
         randId = Random::int45Id;
         askForReplace = true;
+        webMarket = "https://www.bitfinex.com/trading/";
+        webOrders = "https://www.bitfinex.com/reports/orders";
       };
       json handshake() override {
         symbol = base + quote;
+        webMarket += symbol;
         const json reply1 = Curl::Web::xfer(http + "/pubticker/" + symbol);
         Price tickPrice = 0,
               minSize   = 0;
@@ -691,6 +762,9 @@ namespace ₿ {
           {     "base", base            },
           {    "quote", quote           },
           {   "symbol", symbol          },
+          {   "margin", margin          },
+          {"webMarket", webMarket       },
+          {"webOrders", webOrders       },
           {"tickPrice", tickPrice       },
           { "tickSize", tickPrice < 1e-8
                          ? 1e-10
@@ -703,8 +777,8 @@ namespace ₿ {
       static json xfer(const string &url, const string &post, const string &h1, const string &h2) {
         return Curl::Web::request(url, [&](CURL *curl) {
           struct curl_slist *h_ = nullptr;
-          h_ = curl_slist_append(h_, ("X-BFX-APIKEY: " + h1).data());
-          h_ = curl_slist_append(h_, ("X-BFX-PAYLOAD: " + post).data());
+          h_ = curl_slist_append(h_, ("X-BFX-APIKEY: "    + h1).data());
+          h_ = curl_slist_append(h_, ("X-BFX-PAYLOAD: "   + post).data());
           h_ = curl_slist_append(h_, ("X-BFX-SIGNATURE: " + h2).data());
           curl_easy_setopt(curl, CURLOPT_HTTPHEADER, h_);
           curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post.data());
@@ -717,6 +791,8 @@ namespace ₿ {
       {
         http = "https://api.ethfinex.com/v1";
         ws   = "wss://api.ethfinex.com/ws/2";
+        webMarket = "https://www.ethfinex.com/trading/";
+        webOrders = "https://www.ethfinex.com/reports/orders";
       };
   };
   class GwFCoin: public GwApiWs {
@@ -726,9 +802,12 @@ namespace ₿ {
         http   = "https://api.fcoin.com/v2/";
         ws     = "wss://api.fcoin.com/v2/ws";
         randId = Random::char16Id;
+        webMarket = "https://exchange.fcoin.com/ex/main/";
+        webOrders = "https://exchange.fcoin.com/orders";
       };
       json handshake() override {
         symbol = base + quote;
+        webMarket += base + "-" + quote;
         const json reply = Curl::Web::xfer(http + "public/symbols");
         Price  tickPrice = 0;
         Amount tickSize  = 0;
@@ -746,6 +825,9 @@ namespace ₿ {
           {     "base", base     },
           {    "quote", quote    },
           {   "symbol", symbol   },
+          {   "margin", margin   },
+          {"webMarket", webMarket},
+          {"webOrders", webOrders},
           {"tickPrice", tickPrice},
           { "tickSize", tickSize },
           {  "minSize", tickSize },
@@ -760,7 +842,7 @@ namespace ₿ {
             curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post.data());
             h_ = curl_slist_append(h_, "Content-Type: application/json;charset=UTF-8");
           }
-          h_ = curl_slist_append(h_, ("FC-ACCESS-KEY: " + h1).data());
+          h_ = curl_slist_append(h_, ("FC-ACCESS-KEY: "       + h1).data());
           h_ = curl_slist_append(h_, ("FC-ACCESS-SIGNATURE: " + h2).data());
           h_ = curl_slist_append(h_, ("FC-ACCESS-TIMESTAMP: " + h3).data());
           curl_easy_setopt(curl, CURLOPT_HTTPHEADER, h_);
@@ -773,6 +855,8 @@ namespace ₿ {
       {
         http   = "https://api.kraken.com";
         randId = Random::int32Id;
+        webMarket = "https://www.kraken.com/charts";
+        webOrders = "https://www.kraken.com/u/trade";
       };
       json handshake() override {
         const json reply = Curl::Web::xfer(http + "/0/public/AssetPairs?pair=" + base + quote);
@@ -795,6 +879,9 @@ namespace ₿ {
           {     "base", base            },
           {    "quote", quote           },
           {   "symbol", symbol          },
+          {   "margin", margin          },
+          {"webMarket", webMarket       },
+          {"webOrders", webOrders       },
           {"tickPrice", tickPrice       },
           { "tickSize", tickPrice < 1e-8
                          ? 1e-10
@@ -807,7 +894,7 @@ namespace ₿ {
       static json xfer(const string &url, const string &h1, const string &h2, const string &post) {
         return Curl::Web::request(url, [&](CURL *curl) {
           struct curl_slist *h_ = nullptr;
-          h_ = curl_slist_append(h_, ("API-Key: " + h1).data());
+          h_ = curl_slist_append(h_, ("API-Key: "  + h1).data());
           h_ = curl_slist_append(h_, ("API-Sign: " + h2).data());
           curl_easy_setopt(curl, CURLOPT_HTTPHEADER, h_);
           curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post.data());
@@ -820,6 +907,8 @@ namespace ₿ {
       {
         http   = "https://poloniex.com";
         randId = Random::int45Id;
+        webMarket = "https://poloniex.com/exchange";
+        webOrders = "https://poloniex.com/tradeHistory";
       };
       json handshake() override {
         symbol = quote + "_" + base;
@@ -832,6 +921,9 @@ namespace ₿ {
           {     "base", base            },
           {    "quote", quote           },
           {   "symbol", symbol          },
+          {   "margin", margin          },
+          {"webMarket", webMarket       },
+          {"webOrders", webOrders       },
           {"tickPrice", tickPrice       },
           { "tickSize", tickPrice < 1e-8
                           ? 1e-10
@@ -845,7 +937,7 @@ namespace ₿ {
         return Curl::Web::request(url, [&](CURL *curl) {
           struct curl_slist *h_ = nullptr;
           h_ = curl_slist_append(h_, "Content-Type: application/x-www-form-urlencoded");
-          h_ = curl_slist_append(h_, ("Key: " + h1).data());
+          h_ = curl_slist_append(h_, ("Key: "  + h1).data());
           h_ = curl_slist_append(h_, ("Sign: " + h2).data());
           curl_easy_setopt(curl, CURLOPT_HTTPHEADER, h_);
           curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post.data());
